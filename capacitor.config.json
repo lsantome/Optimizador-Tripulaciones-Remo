@@ -1,0 +1,11 @@
+{
+  "appId": "io.github.lsantome.tripulacionesremo",
+  "appName": "Alineación",
+  "webDir": "dist/app",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

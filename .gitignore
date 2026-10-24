@@ -1,0 +1,23 @@
+# Dependencias y salidas de compilación
+node_modules/
+dist/
+build/
+.gradle/
+*.log
+
+# Claves y secretos: nunca en el repositorio (se cargan como secretos de GitHub; ver docs/ANDROID.md)
+*.keystore
+*.jks
+*.p12
+keystore.properties
+local.properties
+
+# Binarios de Android (se generan en CI y se adjuntan a la Release)
+*.apk
+*.aab
+
+# Editor y sistema
+.idea/
+.vscode/
+.DS_Store
+~$*.xlsx

@@ -1,0 +1,109 @@
+# Compila el APK y el AAB de Android (Capacitor) con los mismos archivos web que la PWA.
+# Se ejecuta al crear una etiqueta vX.Y.Z (y adjunta los binarios a la Release) o a mano (Actions → Android → Run workflow).
+#
+# Firma: con los 4 secretos de abajo genera APK y AAB de RELEASE firmados con tu clave. Sin ellos genera un APK de
+# DEPURACIÓN (no se puede actualizar encima de uno de release) y lo avisa en el log.
+#   ANDROID_KEYSTORE_BASE64    keystore en base64  (base64 -w0 release.keystore)
+#   ANDROID_KEYSTORE_PASSWORD  contraseña del keystore
+#   ANDROID_KEY_ALIAS          alias de la clave
+#   ANDROID_KEY_PASSWORD       contraseña de la clave
+# Ver docs/ANDROID.md. El keystore nunca va en el repositorio: el job falla si hay uno versionado.
+name: Android
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: La etiqueta debe coincidir con la versión de package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME#v}" != "$VERSION" ]; then
+            echo "::error::La etiqueta ${GITHUB_REF_NAME} no coincide con package.json (${VERSION}). Sube la versión en package.json y CHANGELOG.md y vuelve a etiquetar."
+            exit 1
+          fi
+      - name: Fallar si hay un keystore o claves versionados
+        run: |
+          if git ls-files | grep -Ei '\.(keystore|jks|p12)$|keystore\.properties'; then
+            echo "::error::Hay un keystore o keystore.properties versionado. Retíralo del repositorio y trata la clave como comprometida."
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+        with: { packages: 'platforms;android-36 build-tools;36.0.0' }
+      - run: npm ci
+      - run: npm test
+      - name: Preparar la clave de firma (si están los 4 secretos)
+        id: firma
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KS_PASS" ] && [ -n "$KS_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "firmado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Faltan secretos de firma: se genera un APK de depuración (no actualizable encima de uno de release). Ver docs/ANDROID.md."
+            echo "firmado=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 'Compilar (release firmada, APK y AAB)'
+        if: steps.firma.outputs.firmado == 'true'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npm run android:release
+      - name: Compilar (depuración)
+        if: steps.firma.outputs.firmado != 'true'
+        run: npm run android:debug
+      - name: Verificar firma y reunir binarios
+        env:
+          FIRMADO: ${{ steps.firma.outputs.firmado }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          mkdir -p dist/release
+          if [ "$FIRMADO" = "true" ]; then
+            APK="dist/release/Optimizador-Tripulaciones-Remo-v${VERSION}.apk"
+            AAB="dist/release/Optimizador-Tripulaciones-Remo-v${VERSION}.aab"
+            cp android/app/build/outputs/apk/release/app-release.apk "$APK"
+            cp android/app/build/outputs/bundle/release/app-release.aab "$AAB"
+            "$BT/apksigner" verify --print-certs "$APK"
+            jarsigner -verify "$AAB"
+          else
+            APK="dist/release/Optimizador-Tripulaciones-Remo-v${VERSION}-debug.apk"
+            cp android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          fi
+          cp dist/optimizador-tripulaciones-remo.html dist/release/
+          rm -f "$RUNNER_TEMP/release.keystore"
+          (cd dist/release && sha256sum * | tee SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with: { name: binarios, path: dist/release }
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: binarios, path: dist/release }
+      - uses: softprops/action-gh-release@v2
+        with: { files: 'dist/release/*' }

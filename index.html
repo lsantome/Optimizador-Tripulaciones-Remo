@@ -616,7 +616,7 @@
 <footer>Esquema de casco no escalado · proa arriba, popa abajo · numeración de popa a proa: patrón (T), bancadas 1…n, proel (P) si el barco lo tiene
   <div id="versionApp" class="version-app"></div>
 </footer>
-<script id="buildInfo" type="application/json">{"version":"dev","fecha":"","pkg":""}</script> <!-- @build -->
+<script id="buildInfo" type="application/json">{"version":"dev","commit":"","fecha":"","pkg":""}</script> <!-- @build -->
 
 <script src="vendor/xlsx.full.min.js"></script>
 <script>
@@ -1351,6 +1351,35 @@ function manejarArchivoBarcos(file){
   reader.readAsArrayBuffer(file);
 }
 
+/* Guardado de Excel. En navegador: descarga directa (XLSX.writeFile). En la app Android (Capacitor) las descargas por
+   <a download>/blob no funcionan en el WebView: se escribe el archivo en la caché de la app y se abre el selector de
+   compartir del sistema (guardar en Drive/Descargas, enviar por WhatsApp o correo…). Los plugins Filesystem y Share
+   se obtienen de window.Capacitor.Plugins; no hay dependencias de npm en el HTML. */
+function esAppNativa(){
+  const C = window.Capacitor;
+  return !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
+}
+function guardarXlsx(wb, nombre, idEstado){
+  if(!esAppNativa()){ XLSX.writeFile(wb, nombre); return Promise.resolve(); }
+  const P = window.Capacitor.Plugins || {};
+  if(!P.Filesystem || !P.Share){
+    mostrarEstadoImport('Esta compilación de la app no incluye el guardado de archivos (faltan los plugins Filesystem/Share).', 'warn', idEstado);
+    return Promise.resolve();
+  }
+  return Promise.resolve().then(function(){
+    const b64 = XLSX.write(wb, {bookType:'xlsx', type:'base64'});
+    return P.Filesystem.writeFile({path: nombre, data: b64, directory: 'CACHE'});
+  }).then(function(r){
+    return P.Share.share({title: nombre, dialogTitle: 'Guardar o compartir ' + nombre, url: r.uri});
+  }).then(function(){
+    mostrarEstadoImport('Archivo listo: ' + nombre, 'ok', idEstado);
+  }).catch(function(e){
+    const m = String((e && e.message) || e || '');
+    if(/cancel/i.test(m)) return; // el usuario cerró el selector
+    mostrarEstadoImport('No se pudo guardar ' + nombre + ': ' + m, 'warn', idEstado);
+  });
+}
+
 function descargarPlantillaBarcos(){
   if(typeof XLSX === 'undefined'){
     mostrarEstadoImport('No se pudo cargar la librería de Excel (¿falta la carpeta vendor/ junto a index.html?).', 'warn', 'importStatusBarcos');
@@ -1384,14 +1413,17 @@ function descargarPlantillaBarcos(){
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Barcos');
   XLSX.utils.book_append_sheet(wb, ws2, 'Leeme');
-  XLSX.writeFile(wb, 'plantilla_barcos.xlsx');
+  guardarXlsx(wb, 'plantilla_barcos.xlsx', 'importStatusBarcos');
 }
 
 /* ============================ ALMACENAMIENTO ============================ */
 
 /* Capa de almacenamiento: usa window.storage (Claude.ai) si existe; si no, localStorage del navegador.
    Si ninguno está disponible (modo privado, bloqueado, file:// restringido) la app funciona igual, sin guardar. */
-const PREFIJO_LS = 'trainera:';
+const PREFIJO_LS = 'optimizador:';
+/* Hasta la 1.3.x las claves llevaban el prefijo genérico 'trainera:' (puede coincidir con otras apps del mismo origen). Al leer, si
+   no existe la clave nueva se toma la antigua y se copia al prefijo nuevo. La antigua NO se borra: podría ser de otra app. */
+const PREFIJO_LS_ANTIGUO = 'trainera:';
 function lsDisponible(){
   try{ return typeof localStorage !== 'undefined' && localStorage !== null; }catch(e){ return false; }
 }
@@ -1400,7 +1432,14 @@ async function storageGet(clave){
     try{ const r = await window.storage.get(clave); return (r && r.value) ? r.value : null; }catch(e){ return null; }
   }
   if(lsDisponible()){
-    try{ return localStorage.getItem(PREFIJO_LS + clave); }catch(e){ return null; }
+    try{
+      let v = localStorage.getItem(PREFIJO_LS + clave);
+      if(v === null){
+        const antiguo = localStorage.getItem(PREFIJO_LS_ANTIGUO + clave);
+        if(antiguo !== null){ v = antiguo; try{ localStorage.setItem(PREFIJO_LS + clave, antiguo); }catch(e){} }
+      }
+      return v;
+    }catch(e){ return null; }
   }
   return null;
 }
@@ -1588,7 +1627,7 @@ function descargarPlantillaExcel(){
   ws['!cols'] = [{wch:22},{wch:11},{wch:26},{wch:12},{wch:24}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
-  XLSX.writeFile(wb, 'plantilla_alineacion_remo.xlsx');
+  guardarXlsx(wb, 'plantilla_alineacion_remo.xlsx');
 }
 
 function exportarTripulacionExcel(asignacion, nombreArchivo){
@@ -1674,7 +1713,7 @@ function exportarTripulacionExcel(asignacion, nombreArchivo){
   const wsR = XLSX.utils.aoa_to_sheet(filasResumen);
   wsR['!cols'] = [{wch:42},{wch:20}];
   XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
-  XLSX.writeFile(wb, nombreArchivo || 'tripulacion.xlsx');
+  guardarXlsx(wb, nombreArchivo || 'tripulacion.xlsx');
 }
 
 /* ============================ UTIL ============================ */
@@ -2547,25 +2586,23 @@ function bind(){
   });
 }
 
-/* Versión de la compilación (la estampa scripts/build-*.js en <script id="buildInfo">). El hash es el mismo que
-   usa el service worker para su caché: sirve para comprobar que un dispositivo ya tiene la última versión publicada. */
+/* Versión de la compilación (la estampan los scripts de build en <script id="buildInfo">): `v<paquete> · build <commit> · <fecha>`.
+   El tooltip añade el código de la caché (hash de contenido), que cambia solo si cambia el código de la app. */
 function mostrarVersion(){
   const el = document.getElementById('versionApp');
   if(!el) return;
   let info = {};
   try { info = JSON.parse(document.getElementById('buildInfo').textContent) || {}; } catch(e){}
   if(!info.fecha || !info.version || info.version === 'dev'){
-    el.textContent = 'Versión de desarrollo (sin compilar)';
+    el.textContent = 'desarrollo';
     return;
   }
   const d = new Date(info.fecha);
-  let cuando = info.fecha;
-  try {
-    if(!isNaN(d)) cuando = d.toLocaleString('es-ES', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-  } catch(e){}
-  el.textContent = 'v' + (info.pkg || '?') + ' · build ' + info.version + ' · ' + cuando;
-  el.title = 'Compilada el ' + info.fecha + ' (UTC). El código de build cambia con cada versión publicada: '
-    + 'si dos dispositivos muestran el mismo, tienen la misma versión.';
+  let dia = String(info.fecha).slice(0, 10);
+  try { if(!isNaN(d)) dia = d.toLocaleDateString('sv-SE'); } catch(e){} // AAAA-MM-DD en la hora local
+  el.textContent = 'v' + (info.pkg || '?') + ' · build ' + (info.commit || '?') + ' · ' + dia;
+  el.title = 'Compilada el ' + info.fecha + ' (UTC) · código ' + info.version + '. El código cambia solo cuando cambia la app: '
+    + 'si dos dispositivos muestran el mismo build, tienen la misma versión.';
 }
 
 /* ============================ INIT ============================ */
@@ -2582,6 +2619,13 @@ cargarDatos();
    El build del HTML autónomo elimina este bloque. */
 (function(){
   if(!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  // App Android (Capacitor): los archivos van dentro del APK y se actualizan con él; un service worker cache-first
+  // taparía las versiones nuevas del APK. Se retira cualquiera que hubiera.
+  if(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()){
+    navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }).catch(function(){});
+    if(window.caches) caches.keys().then(function(ks){ ks.filter(function(k){ return k.indexOf('oar-') === 0; }).forEach(function(k){ caches.delete(k); }); }).catch(function(){});
+    return;
+  }
   var habiaControlador = !!navigator.serviceWorker.controller;
   var aplicando = false;
 

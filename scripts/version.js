@@ -1,10 +1,13 @@
-// Identidad de una compilación, compartida por build-standalone.js y build-pwa.js:
-//   hash  → sha256 (10 hex) de la versión de package.json + sw.js fuente + todos los archivos precacheados. Es la versión de la caché del service
-//           worker y la que se muestra en el pie de la app: si dos dispositivos muestran el mismo hash, tienen el mismo código.
+// Identidad de una compilación, compartida por build-standalone.js, build-pwa.js y build-android-web.js:
+//   version → sha256 (10 hex) de la versión de package.json + sw.js fuente + todos los archivos precacheados. Es el nombre de la
+//           caché del service worker (oar-<version>): cambia solo si cambia el código, no con cada commit de documentación,
+//           para no avisar de «versión nueva» sin motivo. Se ve en el tooltip del pie.
+//   commit → hash corto (7) del commit compilado: BUILD_COMMIT, GITHUB_SHA o `git rev-parse`; con «+» si hay cambios sin
+//           confirmar y «local» si no hay git. Es lo que muestra el pie: `v<pkg> · build <commit> · <fecha>`.
 //   fecha → instante de compilación (ISO UTC). NO entra en el hash (si no, cada despliegue sin cambios de código
 //           provocaría un aviso de "versión nueva"). SOURCE_DATE_EPOCH (segundos) fija la fecha para compilaciones reproducibles.
 //   pkg   → versión de package.json (la de CHANGELOG).
-const fs = require('fs'), path = require('path'), crypto = require('crypto');
+const fs = require('fs'), path = require('path'), crypto = require('crypto'), cp = require('child_process');
 const raiz = path.join(__dirname, '..');
 
 const ESTATICOS = [
@@ -30,6 +33,15 @@ function hash(lista, pkgVersion) {
   return h.digest('hex').slice(0, 10);
 }
 
+function commit() {
+  const e = process.env.BUILD_COMMIT || process.env.GITHUB_SHA;
+  if (e && /^[0-9a-f]{7,40}$/i.test(e)) return e.slice(0, 7).toLowerCase();
+  try {
+    const git = (...a) => cp.execFileSync('git', a, { cwd: raiz, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return git('rev-parse', '--short=7', 'HEAD') + (git('status', '--porcelain') ? '+' : '');
+  } catch (err) { return 'local'; }
+}
+
 function fecha() {
   const e = process.env.SOURCE_DATE_EPOCH;
   const ms = e && /^\d+$/.test(e) ? Number(e) * 1000 : Date.now();
@@ -49,7 +61,7 @@ function identidad() {
   if (!memo) {
     const lista = precache();
     const pkg = JSON.parse(fs.readFileSync(path.join(raiz, 'package.json'), 'utf8'));
-    memo = { lista, info: { version: hash(lista, pkg.version), fecha: fecha(), pkg: pkg.version } };
+    memo = { lista, info: { version: hash(lista, pkg.version), commit: commit(), fecha: fecha(), pkg: pkg.version } };
   }
   return memo;
 }

@@ -25,7 +25,7 @@ precache.forEach(copiar);
 // Descargables que no se precachean
 fs.readdirSync(path.join(raiz, 'examples')).filter(f => f.endsWith('.xlsx')).forEach(f => copiar('examples/' + f));
 ['LICENSE', 'vendor/LICENSE-sheetjs.txt', 'vendor/fonts/LICENSE-IBM-Plex-OFL.txt'].forEach(f => { if (fs.existsSync(path.join(raiz, f))) copiar(f); });
-fs.copyFileSync(path.join(raiz, 'dist', 'optimizador-alineacion-remo.html'), path.join(salida, 'optimizador-alineacion-remo.html'));
+fs.copyFileSync(path.join(raiz, 'dist', 'optimizador-tripulaciones-remo.html'), path.join(salida, 'optimizador-tripulaciones-remo.html'));
 
 // index.html publicado: lleva la misma versión (hash) y fecha que el service worker, visibles en el pie de la app
 const idx = path.join(salida, 'index.html');

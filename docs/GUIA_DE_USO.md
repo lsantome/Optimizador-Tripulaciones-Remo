@@ -112,10 +112,13 @@ La app guarda plantilla, ajustes (incluido el tema) y tripulación manual en el 
 ### Instalar como aplicación (PWA)
 Si abres la herramienta desde GitHub Pages, puedes instalarla: Chrome/Edge muestran un icono de instalar en la barra de direcciones; en Android, menú → *Instalar aplicación*; en iPhone/iPad (Safari), Compartir → *Añadir a pantalla de inicio*. Tras la primera visita funciona **sin conexión**. Cuando haya una versión nueva aparecerá el aviso «Hay una versión nueva de la herramienta» con el botón *Actualizar* (tus datos guardados se conservan). Los datos de la app instalada y los de la pestaña del navegador comparten almacenamiento en el mismo navegador, pero no entre dispositivos.
 
+### App Android (APK)
+Si tienes el APK (se descarga de las *Releases* del repositorio), ábrelo en el móvil para instalarlo; Android te pedirá permitir «instalar apps desconocidas» a la aplicación desde la que lo abras. Funciona sin conexión. Dos diferencias con la web: lo que guardas en la app **no aparece en el navegador ni en la PWA** (y al revés), y al **exportar a Excel** se abre el selector de compartir del móvil, desde donde lo guardas en Drive o Descargas o lo envías. Las actualizaciones son un APK nuevo que se instala encima. Detalles en [ANDROID.md](ANDROID.md).
+
 ## 7. Problemas frecuentes
-- *«No se pudo cargar la librería de Excel»*: estás usando `index.html` sin la carpeta `vendor/` a su lado. Usa la versión autónoma `optimizador-alineacion-remo.html` o copia también `vendor/`.
+- *«No se pudo cargar la librería de Excel»*: estás usando `index.html` sin la carpeta `vendor/` a su lado. Usa la versión autónoma `optimizador-tripulaciones-remo.html` o copia también `vendor/`.
 - *Importé y faltan personas*: revisa el aviso bajo el botón; filas sin nombre, peso válido o posiciones se omiten.
 - *El optimizador necesita remeros suficientes para el barco elegido* (13 en trainera, 6 en trainerilla, 4 en batel, más un patrón con posición `T`).
 - *El optimizador no da 3 propuestas o avisa de datos*: revisa que haya suficientes remeros disponibles, que las posiciones permitidas no sean incompatibles y que, en modo vatios o W/kg, todos tengan potencia.
-- *La app instalada no muestra cambios recientes*: pulsa *Actualizar* en el aviso, o ciérrala y ábrela de nuevo; la versión nueva se descarga al volver a primer plano. Para comprobar qué versión tienes, mira el pie de la página: `v1.x.x · build <hash> · <fecha>`; compáralo con el de otro dispositivo o con el último despliegue.
+- *La app instalada no muestra cambios recientes*: pulsa *Actualizar* en el aviso, o ciérrala y ábrela de nuevo; la versión nueva se descarga al volver a primer plano. Para comprobar qué versión tienes, mira el pie de la página: `v1.x.x · build <commit> · <fecha>`; compáralo con el de otro dispositivo o con el último despliegue en GitHub Actions.
 - *Los datos guardados no aparecen en otro dispositivo o navegador*: es lo esperado; el almacenamiento es local. Usa el Excel para moverlos.

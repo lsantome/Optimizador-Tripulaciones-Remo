@@ -1,42 +1,43 @@
-name: Test, despliegue en Pages y release
+# Pruebas y construcción de la PWA en cada push y PR; despliegue en GitHub Pages solo desde main.
+# Requiere: Settings → Pages → Source = GitHub Actions.
+name: Pages
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
-permissions: { contents: write, pages: write, id-token: write }
-concurrency: { group: pages, cancel-in-progress: true }
+permissions:
+  contents: read
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
       - run: npm test
       - run: npm run build:pwa
-      - uses: actions/upload-artifact@v4
-        with: { name: site, path: dist/site }
+      - name: Comprobar el sitio generado (ficheros, sintaxis, manifest, versión sellada)
+        run: npm run check:site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist/site }
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: test
+    needs: build
     runs-on: ubuntu-latest
-    environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v4
-        with: { name: site, path: _site }
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: _site }
       - id: d
         uses: actions/deploy-pages@v4
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { name: site, path: _site }
-      - uses: softprops/action-gh-release@v2
-        with: { files: _site/optimizador-alineacion-remo.html }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Genera un único HTML autónomo (sin dependencias externas ni carpetas adicionales):
 // incrusta SheetJS (vendor/xlsx.full.min.js) y las fuentes IBM Plex (vendor/fonts, en base64) dentro de index.html.
-// Uso: npm run build  →  dist/optimizador-alineacion-remo.html
+// Uso: npm run build  →  dist/optimizador-tripulaciones-remo.html
 const fs = require('fs'), path = require('path');
 const raiz = path.join(__dirname, '..');
 const { identidad, estampar } = require('./version.js');
@@ -40,7 +40,7 @@ if (externas.length || locales.length) throw new Error('Referencias externas o l
 const pkg = JSON.parse(leer('package.json').toString('utf8'));
 html = html.replace('<head>', '<head>\n<!-- Versión autónoma ' + pkg.version + ' generada con scripts/build-standalone.js: incluye SheetJS 0.18.5 e IBM Plex. -->');
 
-const salida = path.join(raiz, 'dist', 'optimizador-alineacion-remo.html');
+const salida = path.join(raiz, 'dist', 'optimizador-tripulaciones-remo.html');
 fs.mkdirSync(path.dirname(salida), {recursive: true});
 fs.writeFileSync(salida, html);
 console.log('OK:', path.relative(raiz, salida), (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MB');

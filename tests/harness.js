@@ -193,15 +193,57 @@ const test = `
 
   // ---------- persistencia: localStorage como respaldo ----------
   (async () => {
+    // ---------- guardado de Excel: navegador (writeFile) frente a app Android (Filesystem + Share de Capacitor) ----------
+    const wbPrueba = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbPrueba, XLSX.utils.aoa_to_sheet([['Nombre', 'Peso'], ['Ander', 82]]), 'Hoja');
+    const writeFileOriginal = XLSX.writeFile;
+    let aWriteFile = [];
+    XLSX.writeFile = (w, n) => { aWriteFile.push(n); };
+    assert(esAppNativa() === false, 'sin window.Capacitor no es app nativa');
+    await guardarXlsx(wbPrueba, 'web.xlsx');
+    assert(aWriteFile.join() === 'web.xlsx', 'en navegador debe usar XLSX.writeFile');
+    let escritos = [], compartidos = [];
+    window.Capacitor = { isNativePlatform: () => true, Plugins: {
+      Filesystem: { writeFile: async o => { escritos.push(o); return { uri: 'file:///cache/' + o.path }; } },
+      Share: { share: async o => { compartidos.push(o); return {}; } } } };
+    aWriteFile = [];
+    await guardarXlsx(wbPrueba, 'nativa.xlsx');
+    assert(aWriteFile.length === 0, 'en la app nativa no debe usar XLSX.writeFile (no hay descarga por blob)');
+    assert(escritos.length === 1 && escritos[0].path === 'nativa.xlsx' && escritos[0].directory === 'CACHE', 'Filesystem.writeFile mal invocado');
+    assert(escritos[0].encoding === undefined, 'sin encoding: Filesystem interpreta data como base64');
+    const leido = XLSX.read(escritos[0].data, { type: 'base64' });
+    assert(leido.SheetNames[0] === 'Hoja' && leido.Sheets.Hoja.B2.v === 82, 'el base64 enviado no es el libro de Excel');
+    assert(compartidos.length === 1 && compartidos[0].url === 'file:///cache/nativa.xlsx', 'Share.share debe recibir la URI escrita');
+    // el usuario cierra el selector: sin error visible; un fallo real sí queda reflejado
+    window.Capacitor.Plugins.Share.share = async () => { throw new Error('Share canceled'); };
+    await guardarXlsx(wbPrueba, 'cancelado.xlsx');
+    window.Capacitor.Plugins.Filesystem.writeFile = async () => { throw new Error('sin espacio'); };
+    await guardarXlsx(wbPrueba, 'fallo.xlsx'); // no debe lanzar
+    delete window.Capacitor.Plugins.Share;
+    await guardarXlsx(wbPrueba, 'sinplugin.xlsx'); // plugin ausente: avisa, no lanza
+    delete window.Capacitor; XLSX.writeFile = writeFileOriginal;
+    console.log('OK: guardado de Excel en navegador y en app nativa');
+
+    // ---------- claves de almacenamiento: prefijo propio y migración desde 'trainera:' ----------
+    __mem['trainera:clave-migracion'] = 'valor-antiguo';
+    assert(await storageGet('clave-migracion') === 'valor-antiguo', 'debe leer la clave antigua si no existe la nueva');
+    assert(__mem['optimizador:clave-migracion'] === 'valor-antiguo', 'debe copiarla al prefijo nuevo');
+    assert(__mem['trainera:clave-migracion'] === 'valor-antiguo', 'no debe borrar la antigua (podría ser de otra app)');
+    __mem['optimizador:clave-migracion'] = 'valor-nuevo';
+    assert(await storageGet('clave-migracion') === 'valor-nuevo', 'la clave nueva tiene prioridad sobre la antigua');
+    await storageSet('otra', 'x');
+    assert(__mem['optimizador:otra'] === 'x' && !('trainera:otra' in __mem), 'las claves nuevas se escriben solo con el prefijo nuevo');
+    console.log('OK: claves de almacenamiento con prefijo propio y migración');
+
     cargarEjemplo(false);
     const n = state.remeros.length;
     await guardarRemeros();
-    assert(__mem['trainera:plantilla-remeros'], 'no se escribió en localStorage');
+    assert(__mem['optimizador:plantilla-remeros'], 'no se escribió en localStorage');
     state.remeros = [];
     const raw = await storageGet('plantilla-remeros');
     assert(JSON.parse(raw).length === n, 'la plantilla recuperada no coincide');
     await guardarBarcos();
-    assert(JSON.parse(__mem['trainera:maestro-barcos']).length === 4, 'el maestro no se guardó');
+    assert(JSON.parse(__mem['optimizador:maestro-barcos']).length === 4, 'el maestro no se guardó');
     window.storage = { get: async () => { throw new Error('boom'); }, set: async () => { throw new Error('boom'); } };
     assert(await storageGet('x') === null, 'un fallo de window.storage debe devolver null');
     console.log('OK: persistencia localStorage');
