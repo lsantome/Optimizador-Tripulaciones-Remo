@@ -154,6 +154,7 @@ const test = `
   // ---------- vista básica / avanzada: solo cambia lo mostrado, nunca el cálculo ----------
   const usarTipo = k => { state.config.tipoBarco = k; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO[k]); reconstruirSlots(); }; // sin DOM, como seleccionarBarcoPredefinido
   assert(state.config.modoAvanzado === false, 'la vista por defecto es la básica');
+  assert(state.config.tema === 'claro', 'el tema por defecto es el claro');
   ORDEN_TIPOS.forEach(k => {
     usarTipo(k); cargarEjemplo(false);
     const asig = optimizarTop3()[0].asignacion, ref = calcularPotenciaRef();

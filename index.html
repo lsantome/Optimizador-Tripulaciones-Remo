@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -350,9 +350,9 @@
       <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
       <span class="theme-switch-label" id="avanzadoLabel">Básico</span>
     </button>
-    <button type="button" class="theme-switch" id="btnTema" aria-pressed="false" aria-label="Cambiar a modo claro">
+    <button type="button" class="theme-switch" id="btnTema" aria-pressed="true" aria-label="Cambiar a modo oscuro">
       <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
-      <span class="theme-switch-label" id="temaLabel">Oscuro</span>
+      <span class="theme-switch-label" id="temaLabel">Claro</span>
     </button>
   </div>
 </div>
@@ -710,7 +710,7 @@ let state = {
     calado: 0.15,
     mostrarMapaCalor: false,
     mapaCalorMetrica: 'peso',
-    tema: 'oscuro'
+    tema: 'claro' // por defecto claro; lo guardado por el usuario manda
   },
   resultadosAuto: [],
   tabAutoActiva: 0,

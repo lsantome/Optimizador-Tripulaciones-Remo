@@ -3,6 +3,11 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); las versiones siguen [SemVer](https://semver.org/lang/es/).
 La versión de `package.json` es la fuente de verdad: la etiqueta de Git `vX.Y.Z` debe coincidir con ella (el workflow de Android lo comprueba).
 
+## [1.4.1] - 2026-11-01
+
+### Changed
+- **Tema claro por defecto** (antes oscuro). Quien ya haya elegido un tema lo conserva: lo guardado en el dispositivo manda sobre el valor por defecto. El interruptor de la barra superior sigue alternando entre claro y oscuro.
+
 ## [1.4.0] - 2026-10-24
 
 ### Added

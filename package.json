@@ -1,6 +1,6 @@
 {
   "name": "optimizador-tripulaciones-remo",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Optimizador de alineación de remo (trainera, trainerilla, batel): reparto de pesos y potencia, trimado y asiento estimado. HTML de un solo archivo",
   "license": "MIT",
   "private": true,
