@@ -103,7 +103,7 @@ Requiere Android 7.0 o superior (API 24).
 Sobre el APK instalado (con el móvil sin conexión):
 
 1. Abre la app: se ve completa, con las fuentes y el pie con la versión.
-2. Elige un barco, carga el ejemplo, optimiza y arrastra una ficha.
+2. Elige un barco, pulsa *Cargar tripulación de ejemplo* (Configuración), optimiza y arrastra una ficha.
 3. **Exportar a Excel:** aparece el selector de compartir; guarda el archivo y ábrelo en una hoja de cálculo. Después, *Abrir alineación guardada* con ese mismo archivo (sin conexión) debe restaurar la tripulación.
 4. **Descargar plantilla** (remeros y barcos): igual.
 5. **Importar** un Excel de tripulación desde Drive o Descargas.

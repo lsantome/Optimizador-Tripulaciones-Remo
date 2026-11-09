@@ -24,7 +24,7 @@ Reglas de dominio: el **patrón nunca aporta potencia** y su peso no cuenta en e
 ## Uso rápido
 
 1. Abre en el navegador (doble clic) la **versión autónoma** `optimizador-tripulaciones-remo.html` (un solo archivo, sin dependencias ni carpetas), o `index.html` con su carpeta `vendor/`, o usa la versión de Pages.
-2. *Configuración* → carga el ejemplo o importa tu Excel de tripulación ([`examples/plantilla_alineacion_remo.xlsx`](examples/plantilla_alineacion_remo.xlsx)). Opcional: importa tu maestro de barcos ([`examples/plantilla_barcos.xlsx`](examples/plantilla_barcos.xlsx)).
+2. La app arranca **sin datos**. *Configuración* → pulsa **Cargar tripulación de ejemplo** o importa tu Excel de tripulación ([`examples/plantilla_alineacion_remo.xlsx`](examples/plantilla_alineacion_remo.xlsx)). Opcional: importa tu maestro de barcos ([`examples/plantilla_barcos.xlsx`](examples/plantilla_barcos.xlsx)).
 3. *Tripulación* → elige el **barco** (predefinido o del maestro) y ajusta sus dimensiones si hace falta → *Automático* → **Optimizar alineación**, o *Manual* para montarla a mano.
 
 Guía completa: **[docs/GUIA_DE_USO.md](docs/GUIA_DE_USO.md)**. Modelo físico y límites: **[docs/MODELO.md](docs/MODELO.md)**.

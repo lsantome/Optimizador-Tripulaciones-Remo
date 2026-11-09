@@ -7,6 +7,12 @@ const cut = src.indexOf('function renderBanco()');
 assert(cut > 0, 'No se encontró renderBanco(): ajusta el punto de corte en tests/harness.js');
 src = src.slice(0, cut);
 
+// Arranque sin datos: cargarDatos no debe precargar la plantilla de ejemplo (solo el botón «Cargar tripulación de ejemplo»)
+const cuerpoCargarDatos = /async function cargarDatos\(\)\{[\s\S]*?\n\}\n/.exec(src);
+assert(cuerpoCargarDatos, 'No se encontró cargarDatos() en index.html');
+assert(!/cargarEjemplo\(/.test(cuerpoCargarDatos[0]), 'cargarDatos() no debe precargar la plantilla de ejemplo');
+assert(/id="btnExample"[^>]*>Cargar tripulación de ejemplo</.test(html), 'el botón de ejemplo debe llamarse «Cargar tripulación de ejemplo»');
+
 const test = `
   const near = (a, b, tol, msg) => assert(Math.abs(a - b) <= tol, msg + ' (' + a + ' vs ' + b + ')');
 

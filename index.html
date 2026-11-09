@@ -406,7 +406,7 @@
     </div>
     <div class="pool-actions">
       <button class="btn btn-sm" id="btnAddRemero">+ Remero</button>
-      <button class="btn btn-sm btn-ghost" id="btnExample">Cargar ejemplo</button>
+      <button class="btn btn-sm btn-ghost" id="btnExample" title="Sustituye la plantilla actual por personas ficticias de ejemplo (remeros y patrones)">Cargar tripulación de ejemplo</button>
       <button class="btn btn-sm btn-ghost" id="btnClearRemeros">Vaciar</button>
     </div>
     <div style="overflow-x:auto;">
@@ -1457,8 +1457,7 @@ async function storageSet(clave, valor){
 }
 
 async function cargarDatos(){
-  let cargoRemeros = false;
-  try{ const r = await storageGet('plantilla-remeros'); if(r){ const arr = JSON.parse(r); if(Array.isArray(arr)){ state.remeros = arr; cargoRemeros = true; } } }catch(e){}
+  try{ const r = await storageGet('plantilla-remeros'); if(r){ const arr = JSON.parse(r); if(Array.isArray(arr)){ state.remeros = arr; } } }catch(e){}
   try{ const c = await storageGet('config-optimizador'); if(c){ Object.assign(state.config, JSON.parse(c)); } }catch(e){}
   try{ const m = await storageGet('tripulacion-manual'); if(m){ state.asignacionManual = JSON.parse(m); } }catch(e){}
   try{
@@ -1472,7 +1471,7 @@ async function cargarDatos(){
   if(state.config.bandaInicio !== 'estribor') state.config.bandaInicio = 'babor';
   if(state.config.barcoId && !barcoMaestroActivo()) state.config.barcoId = '';
   reconstruirSlots();
-  if(!cargoRemeros){ cargarEjemplo(false); }
+  // sin datos guardados la app arranca vacía: la plantilla de ejemplo se carga a petición (botón «Cargar tripulación de ejemplo»)
   sincronizarControles();
   renderTodo();
 }

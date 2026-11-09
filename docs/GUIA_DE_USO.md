@@ -38,7 +38,7 @@ Lo vacío toma el valor predefinido del tipo. Se acepta coma o punto decimal. Un
 Sin maestro, la app funciona con los barcos predefinidos.
 
 ### Plantilla de remeros
-- **+ Remero**, **Cargar ejemplo** (datos ficticios), **Vaciar**.
+- **+ Remero**, **Cargar tripulación de ejemplo** (datos ficticios; sustituye la plantilla actual) y **Vaciar**. La app arranca sin ningún remero: hasta que cargues el ejemplo, importes tu Excel o añadas remeros, el banco estará vacío.
 - Cada persona: nombre, kg, W (opcional), W/kg (calculado) y **posiciones** en las que puede ir.
   - Sin posiciones marcadas = sin restricción (cualquier puesto de remero del barco, incluido el proel si existe).
   - Una persona marcada solo como patrón (`T`) no remará nunca.
