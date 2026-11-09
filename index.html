@@ -590,6 +590,9 @@
         <div class="bench-drop-hint">Arrastra una ficha a un puesto del barco, o pulsa una ficha y luego el puesto.</div>
         <button class="btn btn-ghost btn-block" id="btnVaciarManual" style="margin-top:16px;">Vaciar tripulación</button>
         <button class="btn btn-ghost btn-block" id="btnExportarManual" style="margin-top:10px;">Exportar a Excel</button>
+        <button class="btn btn-ghost btn-block" id="btnAbrirAlineacion" style="margin-top:10px;" title="Abre un Excel exportado por esta app y recupera plantilla, barco, ajustes y tripulación">Abrir alineación guardada</button>
+        <input type="file" id="inputAlineacionFile" accept=".xlsx,.xls" style="display:none;">
+        <span class="import-status" id="importStatusAlineacion" role="status" style="display:block; margin-top:6px;"></span>
       </section>
 
       <section class="panel panel-barco">
@@ -1630,7 +1633,7 @@ function descargarPlantillaExcel(){
   guardarXlsx(wb, 'plantilla_alineacion_remo.xlsx');
 }
 
-function exportarTripulacionExcel(asignacion, nombreArchivo){
+function exportarTripulacionExcel(asignacion, nombreArchivo, idEstado){
   if(typeof XLSX === 'undefined'){
     mostrarEstadoImport('No se pudo cargar la librería de Excel (¿falta la carpeta vendor/ junto a index.html?).', 'warn');
     return;
@@ -1713,7 +1716,198 @@ function exportarTripulacionExcel(asignacion, nombreArchivo){
   const wsR = XLSX.utils.aoa_to_sheet(filasResumen);
   wsR['!cols'] = [{wch:42},{wch:20}];
   XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
-  guardarXlsx(wb, nombreArchivo || 'tripulacion.xlsx');
+  const wsD = XLSX.utils.aoa_to_sheet(filasDatosAlineacion(asignacion));
+  wsD['!cols'] = [{wch:16},{wch:18},{wch:24},{wch:10},{wch:12},{wch:24},{wch:11}];
+  XLSX.utils.book_append_sheet(wb, wsD, HOJA_DATOS);
+  guardarXlsx(wb, nombreArchivo || 'tripulacion.xlsx', idEstado);
+}
+
+/* ---- Alineación reimportable ----
+   Cada exportación lleva una hoja de datos en formato máquina (HOJA_DATOS) con todo lo necesario para volver a abrir la
+   alineación y seguir editándola: ajustes que afectan al cálculo, barco, TODA la plantilla (también quien no iba en el barco)
+   y la asignación. Las otras hojas son solo para leer: lo que se cambie en ellas no se lee al reabrir.
+   Formato (una fila por dato; no hay JSON en una celda porque Excel limita la celda a 32.767 caracteres):
+     fila 1:  MARCA_DATOS | formato | versión de la app | fecha ISO
+     AJUSTE   | clave | valor                          (barcoNombre + AJUSTES_TEXTO + AJUSTES_NUM)
+     REMERO   | n | nombre | peso | potencia | posiciones (códigos del Excel de tripulación) | disponible 1/0
+     PUESTO   | id del puesto | n del remero
+   Si cambia el formato, sube FORMATO_DATOS (la app rechaza archivos con un formato más nuevo que el suyo). */
+const HOJA_DATOS = 'Datos (no editar)';
+const MARCA_DATOS = 'OAR-ALINEACION';
+const FORMATO_DATOS = 1;
+const AJUSTES_TEXTO = {
+  categoria: function(){ return Object.keys(CATEGORIAS); },
+  tipoBarco: function(){ return Object.keys(TIPOS_BARCO); },
+  prioridad: function(){ return ['peso', 'vatios', 'wkg']; },
+  proelBanda: function(){ return ['babor', 'estribor']; },
+  bandaInicio: function(){ return ['babor', 'estribor']; }
+};
+// [clave, mínimo, máximo, mínimo excluido?]
+const AJUSTES_NUM = [
+  ['eslora', 0, Infinity, true], ['manga', 0, Infinity, true], ['puntal', 0, Infinity, true], ['calado', 0, Infinity, true],
+  ['pesoCasco', 0, Infinity, true], ['pesoMedioObjetivo', 0, Infinity, true], ['xTrimObjetivo', 0, 1, false],
+  ['wBanda', 0, Infinity, false], ['wTrim', 0, Infinity, false], ['wPitch', 0, Infinity, false], ['wPareja', 0, Infinity, false]
+];
+
+function versionAppTexto(){
+  try{
+    const info = JSON.parse(document.getElementById('buildInfo').textContent) || {};
+    return info.pkg ? (info.pkg + (info.commit ? ' · ' + info.commit : '')) : '';
+  }catch(e){ return ''; }
+}
+
+function filasDatosAlineacion(asignacion){
+  const c = state.config, b = barcoMaestroActivo();
+  const filas = [
+    [MARCA_DATOS, FORMATO_DATOS, versionAppTexto(), new Date().toISOString()],
+    ['Hoja de datos para volver a abrir esta alineación en la app (botón «Abrir alineación guardada»). No la edites: los cambios en las otras hojas no se leen.', '', '', '', '', '', ''],
+    ['AJUSTE', 'barcoNombre', b ? b.nombre : '', '', '', '', '']
+  ];
+  Object.keys(AJUSTES_TEXTO).forEach(function(k){ filas.push(['AJUSTE', k, c[k], '', '', '', '']); });
+  AJUSTES_NUM.forEach(function(a){ filas.push(['AJUSTE', a[0], c[a[0]], '', '', '', '']); });
+  const indice = {};
+  state.remeros.forEach(function(r, i){
+    indice[r.id] = i + 1;
+    filas.push(['REMERO', i + 1, r.nombre, r.peso, (r.potencia !== undefined && r.potencia !== null) ? r.potencia : '', posicionesAExcel(r), r.disponible === false ? 0 : 1]);
+  });
+  SLOTS.forEach(function(slot){
+    const n = asignacion[slot.id] ? indice[asignacion[slot.id]] : undefined;
+    if(n) filas.push(['PUESTO', slot.id, n, '', '', '', '']);
+  });
+  return filas;
+}
+
+/* Lee y valida el libro. No toca el estado: devuelve {error} o {datos, avisos}. */
+function leerAlineacionGuardada(wb){
+  const hoja = wb.Sheets[HOJA_DATOS];
+  if(!hoja) return {error: 'El archivo no tiene la hoja «' + HOJA_DATOS + '». Solo se pueden abrir alineaciones exportadas por esta app a partir de la versión 1.5.0 (los exportados antes no la llevan).'};
+  const filas = XLSX.utils.sheet_to_json(hoja, {header:1, defval:''});
+  const cab = filas[0] || [];
+  if(String(cab[0]).trim() !== MARCA_DATOS) return {error: 'La hoja «' + HOJA_DATOS + '» no tiene el formato esperado (¿se ha modificado?).'};
+  const formato = Number(cab[1]);
+  if(!isFinite(formato) || formato < 1) return {error: 'No se reconoce la versión del formato del archivo.'};
+  if(formato > FORMATO_DATOS) return {error: 'El archivo se creó con una versión más nueva de la app (formato ' + formato + '; esta app entiende hasta el ' + FORMATO_DATOS + '). Actualiza la app para abrirlo.'};
+
+  const errores = [], avisos = [];
+  const cfg = {}, remeros = [], puestosFila = [];
+  let barcoNombre = '';
+  for(let i = 1; i < filas.length; i++){
+    const f = filas[i] || [], tipo = String(f[0]).trim(), fila = i + 1;
+    if(tipo === 'AJUSTE'){
+      const k = String(f[1]).trim();
+      if(k === 'barcoNombre'){ barcoNombre = String(f[2]).trim(); continue; }
+      if(AJUSTES_TEXTO[k]){
+        const v = String(f[2]).trim();
+        if(AJUSTES_TEXTO[k]().indexOf(v) === -1) errores.push('Fila ' + fila + ': valor no válido para «' + k + '» (' + v + ').'); else cfg[k] = v;
+        continue;
+      }
+      const a = AJUSTES_NUM.find(function(x){ return x[0] === k; });
+      if(a){
+        const n = parseNumeroExcel(f[2]);
+        if(n === undefined || !isFinite(n) || (a[3] ? n <= a[1] : n < a[1]) || n > a[2]) errores.push('Fila ' + fila + ': valor no válido para «' + k + '» (' + f[2] + ').'); else cfg[k] = n;
+        continue;
+      }
+      avisos.push('Ajuste desconocido «' + k + '» (se ignora).');
+    } else if(tipo === 'REMERO'){
+      const n = Number(f[1]), nombre = String(f[2]).trim(), peso = parseNumeroExcel(f[3]), pot = parseNumeroExcel(f[4]);
+      const textoPos = String(f[5]).trim();
+      if(!isFinite(n) || n < 1 || remeros[n - 1] !== undefined) { errores.push('Fila ' + fila + ': número de remero repetido o no válido.'); continue; }
+      if(!nombre){ errores.push('Fila ' + fila + ': remero sin nombre.'); continue; }
+      if(peso === undefined || !isFinite(peso) || peso <= 0){ errores.push('«' + nombre + '»: peso no válido.'); continue; }
+      if(pot !== undefined && (!isFinite(pot) || pot <= 0)){ errores.push('«' + nombre + '»: potencia no válida.'); continue; }
+      const posiciones = parsearPosicionesExcel(textoPos);
+      if(textoPos !== '' && posiciones.length !== textoPos.split(',').map(function(x){ return x.trim(); }).filter(Boolean).length) { errores.push('«' + nombre + '»: posiciones no reconocidas (' + textoPos + ').'); continue; }
+      remeros[n - 1] = {nombre: nombre, peso: peso, potencia: pot, posiciones: posiciones, disponible: Number(f[6]) !== 0};
+    } else if(tipo === 'PUESTO'){
+      puestosFila.push({fila: fila, slot: String(f[1]).trim(), n: Number(f[2])});
+    }
+  }
+  if(errores.length === 0){
+    ['categoria', 'tipoBarco', 'prioridad', 'proelBanda', 'bandaInicio'].concat(AJUSTES_NUM.map(function(a){ return a[0]; })).forEach(function(k){
+      if(cfg[k] === undefined) errores.push('Falta el ajuste «' + k + '».');
+    });
+    for(let j = 0; j < remeros.length; j++) if(remeros[j] === undefined) { errores.push('Faltan remeros en la numeración (hueco en el nº ' + (j + 1) + ').'); break; }
+    if(remeros.length === 0) errores.push('El archivo no contiene ningún remero.');
+  }
+  const puestos = {};
+  if(errores.length === 0){
+    const validos = new Set(construirSlots(cfg.tipoBarco, cfg.eslora, cfg.bandaInicio).map(function(sl){ return sl.id; }));
+    const usados = new Set();
+    puestosFila.forEach(function(p){
+      if(!validos.has(p.slot)) errores.push('Fila ' + p.fila + ': el puesto «' + p.slot + '» no existe en ' + TIPOS_BARCO[cfg.tipoBarco].label.toLowerCase() + '.');
+      else if(puestos[p.slot] !== undefined) errores.push('Fila ' + p.fila + ': puesto «' + p.slot + '» repetido.');
+      else if(!isFinite(p.n) || p.n < 1 || p.n > remeros.length) errores.push('Fila ' + p.fila + ': el puesto «' + p.slot + '» apunta a un remero que no existe.');
+      else if(usados.has(p.n)) errores.push('Fila ' + p.fila + ': el remero nº ' + p.n + ' está en dos puestos.');
+      else { puestos[p.slot] = p.n; usados.add(p.n); }
+    });
+  }
+  if(errores.length) return {error: 'No se puede abrir el archivo: ' + errores.slice(0, 5).join(' ') + (errores.length > 5 ? ' (y ' + (errores.length - 5) + ' errores más)' : '')};
+  return {datos: {config: cfg, barcoNombre: barcoNombre, remeros: remeros, puestos: puestos}, avisos: avisos};
+}
+
+/* Sustituye plantilla, barco, ajustes y asignación manual por los del archivo ya validado. Devuelve avisos (texto). */
+function aplicarAlineacionGuardada(d){
+  const avisos = [];
+  state.remeros = d.remeros.map(function(r){ return Object.assign({id: nuevoId()}, r); });
+  const c = state.config;
+  Object.keys(d.config).forEach(function(k){ c[k] = d.config[k]; });
+  // barco del maestro: se selecciona el del mismo tipo y nombre; si no existe, se añade con los datos del archivo
+  c.barcoId = '';
+  if(d.barcoNombre){
+    let b = state.barcos.find(function(x){ return x.nombre === d.barcoNombre && x.tipo === c.tipoBarco; });
+    if(!b){
+      b = {id: nuevoId(), tipo: c.tipoBarco, nombre: d.barcoNombre, eslora: c.eslora, manga: c.manga, puntal: c.puntal, calado: c.calado, peso: c.pesoCasco};
+      state.barcos.push(b);
+      avisos.push('Se ha añadido «' + d.barcoNombre + '» al maestro de barcos.');
+    } else if(b.eslora !== c.eslora || b.manga !== c.manga || b.puntal !== c.puntal || b.calado !== c.calado || b.peso !== c.pesoCasco){
+      avisos.push('«' + d.barcoNombre + '» ya existía en el maestro con otras dimensiones; se usan las del archivo en esta alineación.');
+    }
+    c.barcoId = b.id;
+  }
+  reconstruirSlots();
+  state.resultadosAuto = [];
+  state.asignacionManual = {};
+  Object.keys(d.puestos).forEach(function(slot){ state.asignacionManual[slot] = state.remeros[d.puestos[slot] - 1].id; });
+  return avisos;
+}
+
+function manejarArchivoAlineacion(file){
+  const ID = 'importStatusAlineacion';
+  if(typeof XLSX === 'undefined'){
+    mostrarEstadoImport('No se pudo cargar la librería de Excel (¿falta la carpeta vendor/ junto a index.html?).', 'warn', ID);
+    return;
+  }
+  mostrarEstadoImport('Leyendo ' + file.name + '…', '', ID);
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const res = leerAlineacionGuardada(wb);
+      if(res.error){ mostrarEstadoImport(res.error, 'warn', ID); return; }
+      const d = res.datos, ocupados = Object.keys(d.puestos).length;
+      const pregunta = 'Se va a REEMPLAZAR la plantilla actual (' + state.remeros.length + ' remeros), el barco y los ajustes por los de «' + file.name + '» (' +
+        d.remeros.length + ' remeros, ' + TIPOS_BARCO[d.config.tipoBarco].label.toLowerCase() + ', ' + ocupados + ' puestos ocupados).\n\n' +
+        'Si quieres conservar lo actual, cancela y expórtalo antes. ¿Continuar?';
+      if(!window.confirm(pregunta)){ mostrarEstadoImport('Cancelado: no se ha cambiado nada.', '', ID); return; }
+      const avisos = aplicarAlineacionGuardada(d).concat(res.avisos);
+      guardarRemeros(); guardarBarcos(); guardarConfig(); guardarManual();
+      sincronizarControles();
+      actualizarMetaPlantilla();
+      renderTodo();
+      cambiarTabPrincipal('tripulacion');
+      cambiarModoTripulacion('manual');
+      mostrarEstadoImport('Alineación abierta: ' + d.remeros.length + ' remeros y ' + ocupados + ' puestos ocupados.' + (avisos.length ? ' ' + avisos.join(' ') : ''), avisos.length ? 'warn' : 'ok', ID);
+    }catch(err){
+      console.error(err);
+      mostrarEstadoImport('No se pudo leer el archivo. Comprueba que es un .xlsx exportado por esta app.', 'warn', ID);
+    }
+  };
+  reader.onerror = function(){ mostrarEstadoImport('Error al leer el archivo.', 'warn', ID); };
+  reader.readAsArrayBuffer(file);
+}
+
+function fechaArchivo(){
+  try{ return new Date().toLocaleDateString('sv-SE'); }catch(e){ return new Date().toISOString().slice(0, 10); } // AAAA-MM-DD en la hora local
 }
 
 /* ============================ UTIL ============================ */
@@ -2262,7 +2456,7 @@ function renderResultados(){
     btn.addEventListener('click', function(){
       const idx = Number(btn.getAttribute('data-exportar'));
       const res = state.resultadosAuto[idx];
-      if(res) exportarTripulacionExcel(res.asignacion, 'tripulacion_alineacion_' + String.fromCharCode(65+idx) + '.xlsx');
+      if(res) exportarTripulacionExcel(res.asignacion, 'tripulacion_alineacion_' + String.fromCharCode(65+idx) + '_' + fechaArchivo() + '.xlsx');
     });
   });
 }
@@ -2581,8 +2775,16 @@ function bind(){
   document.getElementById('btnVaciarManual').addEventListener('click', function(){
     state.asignacionManual = {}; guardarManual(); refrescarModoManual();
   });
+  document.getElementById('btnAbrirAlineacion').addEventListener('click', function(){
+    document.getElementById('inputAlineacionFile').click();
+  });
+  document.getElementById('inputAlineacionFile').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(file) manejarArchivoAlineacion(file);
+    e.target.value = '';
+  });
   document.getElementById('btnExportarManual').addEventListener('click', function(){
-    exportarTripulacionExcel(state.asignacionManual, 'tripulacion_manual.xlsx');
+    exportarTripulacionExcel(state.asignacionManual, 'tripulacion_manual_' + fechaArchivo() + '.xlsx', 'importStatusAlineacion');
   });
 }
 

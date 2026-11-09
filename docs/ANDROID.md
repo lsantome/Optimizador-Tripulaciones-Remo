@@ -10,7 +10,7 @@ La app Android es la misma aplicación empaquetada con [Capacitor](https://capac
 |---|---|---|
 | Instalación | Desde el navegador | Instalando el `.apk` |
 | Actualizaciones | Aviso «Hay una versión nueva» | Instalar un APK nuevo encima del anterior (misma clave de firma y `versionCode` mayor) |
-| Datos guardados | Almacenamiento del navegador | **Almacenamiento propio de la app: no se comparte con la PWA ni con el navegador.** El Excel es el medio para moverlos |
+| Datos guardados | Almacenamiento del navegador | **Almacenamiento propio de la app: no se comparte con la PWA ni con el navegador.** El Excel exportado (se reabre con *Abrir alineación guardada*) es el medio para moverlos |
 | Exportar a Excel | Descarga del navegador | Se escribe en la caché de la app y se abre el selector de compartir del sistema |
 | Importar Excel | Selector de archivos | Selector de archivos del sistema |
 | Service worker | Sí | No: los archivos ya están en el APK; el código lo desactiva (y retira cualquiera existente) en la app nativa |
@@ -104,7 +104,7 @@ Sobre el APK instalado (con el móvil sin conexión):
 
 1. Abre la app: se ve completa, con las fuentes y el pie con la versión.
 2. Elige un barco, carga el ejemplo, optimiza y arrastra una ficha.
-3. **Exportar a Excel:** aparece el selector de compartir; guarda el archivo y ábrelo en una hoja de cálculo.
+3. **Exportar a Excel:** aparece el selector de compartir; guarda el archivo y ábrelo en una hoja de cálculo. Después, *Abrir alineación guardada* con ese mismo archivo (sin conexión) debe restaurar la tripulación.
 4. **Descargar plantilla** (remeros y barcos): igual.
 5. **Importar** un Excel de tripulación desde Drive o Descargas.
 6. Cierra y vuelve a abrir: los datos guardados siguen ahí. Gira el móvil y usa el botón atrás.

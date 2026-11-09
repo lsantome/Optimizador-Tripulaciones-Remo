@@ -151,6 +151,78 @@ const test = `
   const rc = procesarFilasExcel(leer('plantilla_alineacion_remo.xlsx'));
   assert(rc.remeros.length === 4 && rc.errores.length === 0, 'la plantilla de tripulación debe reimportarse limpia: ' + rc.errores.join('|'));
 
+  // ---------- alineación reimportable: exportar -> abrir debe devolver exactamente lo mismo ----------
+  assert(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(fechaArchivo()), 'fechaArchivo debe ser AAAA-MM-DD');
+  const rtNumericos = ev => Object.keys(ev).filter(k => typeof ev[k] === 'number' || ev[k] === null).reduce((o, k) => { o[k] = ev[k]; return o; }, {});
+  const rtPorPuesto = asig => Object.keys(asig).sort().map(sid => { const p = buscarPersona(asig[sid]); return sid + '=' + p.nombre + '|' + p.peso + '|' + p.potencia + '|' + p.posiciones.join('+') + '|' + p.disponible; });
+  const rtAjustes = () => JSON.stringify(Object.keys(AJUSTES_TEXTO).concat(AJUSTES_NUM.map(a => a[0])).map(k => [k, state.config[k]]));
+  const rtEditar = (wb, fn) => { const aoa = XLSX.utils.sheet_to_json(wb.Sheets[HOJA_DATOS], {header:1, defval:''}); fn(aoa); wb.Sheets[HOJA_DATOS] = XLSX.utils.aoa_to_sheet(aoa); return wb; };
+  const rtLibro = nombre => XLSX.readFile(nombre);
+  const rtBarcosPrevios = state.barcos, rtConfigPrevia = JSON.parse(JSON.stringify(state.config)); // este bloque cambia el estado compartido: se restaura al terminar
+  ORDEN_TIPOS.forEach(k => {
+    state.config.tipoBarco = k; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO[k]);
+    state.config.prioridad = 'wkg'; state.config.wBanda = 1.7; state.config.categoria = 'senior_f'; state.config.bandaInicio = 'estribor';
+    state.config.proelBanda = 'estribor'; state.config.xTrimObjetivo = 0.47; state.config.pesoMedioObjetivo = 79; state.config.calado = 0.21;
+    reconstruirSlots(); cargarEjemplo(false);
+    state.remeros[3].disponible = false; state.remeros[4].posiciones = ['b2_bab', 'b2_est', 'e1', 'e2'].filter(id => SLOTS.some(sl => sl.id === id));
+    const asig = optimizarTop3()[0].asignacion, ev1 = rtNumericos(evaluar(asig, calcularPotenciaRef()));
+    const antes = rtPorPuesto(asig).join(';'), ajustes1 = rtAjustes(), nRem = state.remeros.length;
+    exportarTripulacionExcel(asig, 'rt_' + k + '.xlsx');
+    const wb = rtLibro('rt_' + k + '.xlsx');
+    assert(wb.SheetNames.join() === 'Tripulación,Desglose,Resumen,' + HOJA_DATOS, k + ': hojas de la exportación: ' + wb.SheetNames.join());
+    const rd = leerAlineacionGuardada(wb);
+    assert(!rd.error, k + ': el archivo exportado debe poder abrirse: ' + rd.error);
+    // se borra todo y se pone otro barco/ajustes para comprobar que lo restaura el archivo y no el estado previo
+    state.remeros = []; state.asignacionManual = {}; state.resultadosAuto = [];
+    state.config.tipoBarco = 'trainera'; cargarValoresBarco(TIPOS_BARCO.trainera);
+    Object.assign(state.config, {prioridad: 'peso', wBanda: 1, categoria: 'senior_m', bandaInicio: 'babor', proelBanda: 'babor', xTrimObjetivo: 0.5, pesoMedioObjetivo: 82});
+    reconstruirSlots();
+    aplicarAlineacionGuardada(rd.datos);
+    assert(state.remeros.length === nRem, k + ': se pierden remeros (' + state.remeros.length + ' de ' + nRem + ')');
+    assert(rtAjustes() === ajustes1, k + ': ajustes distintos tras abrir');
+    assert(rtPorPuesto(state.asignacionManual).join(';') === antes, k + ': la asignación (nombre, peso, potencia, posiciones, disponibilidad) cambia tras abrir');
+    assert.deepStrictEqual(rtNumericos(evaluar(state.asignacionManual, calcularPotenciaRef())), ev1);
+    assert(state.remeros.filter(r => r.disponible === false).length === 1, k + ': la disponibilidad debe conservarse');
+  });
+  console.log('OK: exportar y abrir una alineación devuelve la misma asignación y las mismas métricas (3 tipos de barco)');
+
+  // barco del maestro: se vuelve a seleccionar o se añade
+  state.config.tipoBarco = 'batel'; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO.batel); reconstruirSlots(); cargarEjemplo(false);
+  state.barcos = [{id: 'bX', tipo: 'batel', nombre: 'Barco X', eslora: 8.5, manga: 1.2, puntal: 0.6, calado: 0.12, peso: 70}];
+  state.config.barcoId = 'bX'; cargarValoresBarco(state.barcos[0]); reconstruirSlots();
+  const rtAsig = optimizarTop3()[0].asignacion;
+  exportarTripulacionExcel(rtAsig, 'rt_maestro.xlsx');
+  const rm = leerAlineacionGuardada(rtLibro('rt_maestro.xlsx'));
+  assert(!rm.error && rm.datos.barcoNombre === 'Barco X', 'el nombre del barco del maestro debe viajar en el archivo');
+  state.barcos = []; state.config.barcoId = '';
+  const av1 = aplicarAlineacionGuardada(rm.datos);
+  assert(state.barcos.length === 1 && nombreBarcoActivo() === 'Barco X' && state.barcos[0].eslora === 8.5 && av1.length === 1, 'si el barco no está en el maestro se añade');
+  const av2 = aplicarAlineacionGuardada(rm.datos);
+  assert(state.barcos.length === 1 && nombreBarcoActivo() === 'Barco X' && av2.length === 0, 'si ya existe con las mismas dimensiones se selecciona sin duplicar');
+  state.barcos[0].eslora = 9;
+  assert(aplicarAlineacionGuardada(rm.datos).length === 1 && state.config.eslora === 8.5, 'si existe con otras dimensiones, manda el archivo y se avisa');
+
+  // archivos que NO deben abrirse (y el estado no se toca)
+  const rtBase = rtLibro('rt_trainera.xlsx'), rtEstado = JSON.stringify([state.remeros.length, state.config, Object.keys(state.asignacionManual)]);
+  const rtFalla = (nombre, wbMalo, trozo) => { const r = leerAlineacionGuardada(wbMalo); assert(r.error && r.error.indexOf(trozo) !== -1, nombre + ': se esperaba un error con «' + trozo + '», pero fue: ' + (r.error || 'ninguno')); };
+  const rtCopia = () => rtLibro('rt_trainera.xlsx');
+  const rtSin = rtCopia(); delete rtSin.Sheets[HOJA_DATOS]; rtSin.SheetNames.pop();
+  rtFalla('sin hoja de datos', rtSin, 'no tiene la hoja');
+  rtFalla('marca alterada', rtEditar(rtCopia(), a => { a[0][0] = 'OTRA-COSA'; }), 'formato esperado');
+  rtFalla('formato futuro', rtEditar(rtCopia(), a => { a[0][1] = 99; }), 'más nueva');
+  rtFalla('valor de ajuste inválido', rtEditar(rtCopia(), a => { a.find(f => f[1] === 'prioridad')[2] = 'inventada'; }), 'prioridad');
+  rtFalla('dimensión negativa', rtEditar(rtCopia(), a => { a.find(f => f[1] === 'eslora')[2] = -3; }), 'eslora');
+  rtFalla('peso no numérico', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[3] = 'mucho'; }), 'peso no válido');
+  rtFalla('posiciones desconocidas', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[5] = '9Z'; }), 'posiciones no reconocidas');
+  rtFalla('puesto inexistente', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'PUESTO')[1] = 'e5'; }), 'no existe');
+  rtFalla('remero inexistente en un puesto', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'PUESTO')[2] = 999; }), 'no existe');
+  rtFalla('mismo remero en dos puestos', rtEditar(rtCopia(), a => { const p = a.filter(f => f[0] === 'PUESTO'); p[1][2] = p[0][2]; }), 'dos puestos');
+  rtFalla('falta un ajuste', rtEditar(rtCopia(), a => { a.splice(a.findIndex(f => f[1] === 'calado'), 1); }), 'calado');
+  rtFalla('sin remeros', rtEditar(rtCopia(), a => { for(let i = a.length - 1; i > 0; i--) if(a[i][0] === 'REMERO' || a[i][0] === 'PUESTO') a.splice(i, 1); }), 'ningún remero');
+  assert(JSON.stringify([state.remeros.length, state.config, Object.keys(state.asignacionManual)]) === rtEstado, 'leer un archivo no válido no debe modificar el estado');
+  console.log('OK: archivos no válidos rechazados con mensaje claro y sin tocar el estado');
+  state.barcos = rtBarcosPrevios; Object.assign(state.config, rtConfigPrevia); reconstruirSlots(); state.asignacionManual = {}; state.resultadosAuto = [];
+
   // ---------- vista básica / avanzada: solo cambia lo mostrado, nunca el cálculo ----------
   const usarTipo = k => { state.config.tipoBarco = k; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO[k]); reconstruirSlots(); }; // sin DOM, como seleccionarBarcoPredefinido
   assert(state.config.modoAvanzado === false, 'la vista por defecto es la básica');
