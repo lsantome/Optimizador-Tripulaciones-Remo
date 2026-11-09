@@ -7,6 +7,10 @@ La versión de `package.json` es la fuente de verdad: la etiqueta de Git `vX.Y.Z
 
 ### Changed
 - **La app arranca sin tripulación precargada.** Antes, sin datos guardados, cargaba la plantilla de ejemplo al abrirse. Ahora el banco empieza vacío y los datos ficticios se cargan a petición con el botón de Configuración, que pasa a llamarse **«Cargar tripulación de ejemplo»** (antes «Cargar ejemplo»). Quien ya tenga datos guardados no nota ningún cambio. Los tres tipos de barco siguen disponibles en el selector.
+- **Confirmación antes de perder la plantilla:** «Cargar tripulación de ejemplo» y «Vaciar» preguntan antes de sustituir o borrar la plantilla cuando ya hay remeros; con la plantilla vacía no preguntan. (Importar un Excel sigue sustituyendo la plantilla sin preguntar, como antes.)
+
+### Added
+- **Aviso en el primer arranque:** mientras no hay remeros, la pestaña Tripulación muestra «Todavía no hay remeros» con un botón **Ir a Configuración**; desaparece al cargar o importar la plantilla.
 
 ## [1.5.0] - 2026-11-09
 

@@ -229,6 +229,17 @@ const test = `
   console.log('OK: archivos no válidos rechazados con mensaje claro y sin tocar el estado');
   state.barcos = rtBarcosPrevios; Object.assign(state.config, rtConfigPrevia); reconstruirSlots(); state.asignacionManual = {}; state.resultadosAuto = [];
 
+  // ---------- confirmación antes de sustituir o borrar la plantilla (solo si ya hay remeros) ----------
+  { const rtRem = state.remeros; let preguntas = 0, respuesta = true;
+    window.confirm = () => { preguntas++; return respuesta; };
+    state.remeros = [];
+    assert(confirmarSiHayRemeros('x') === true && preguntas === 0, 'con la plantilla vacía no debe preguntar');
+    state.remeros = [{id: 'a', nombre: 'A', peso: 80, posiciones: [], disponible: true}];
+    respuesta = false; assert(confirmarSiHayRemeros('x') === false && preguntas === 1, 'con remeros debe preguntar y respetar «Cancelar»');
+    respuesta = true; assert(confirmarSiHayRemeros('x') === true && preguntas === 2, 'con remeros debe preguntar y respetar «Aceptar»');
+    delete window.confirm; state.remeros = rtRem; }
+  console.log('OK: confirmación antes de sustituir o borrar la plantilla');
+
   // ---------- vista básica / avanzada: solo cambia lo mostrado, nunca el cálculo ----------
   const usarTipo = k => { state.config.tipoBarco = k; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO[k]); reconstruirSlots(); }; // sin DOM, como seleccionarBarcoPredefinido
   assert(state.config.modoAvanzado === false, 'la vista por defecto es la básica');
