@@ -37,8 +37,8 @@ Guía completa: **[docs/GUIA_DE_USO.md](docs/GUIA_DE_USO.md)**. Modelo físico y
 
 ## Formato del Excel
 
-Una fila por persona, primera hoja, columnas en este orden: `Nombre · Peso (kg) · Posiciones · Potencia (W, opcional)`.
-Posiciones separadas por comas: `T` patrón, `P` proel, `1B…6B` babor, `1E…6E` estribor (bancadas numeradas de popa a proa). En trainerilla y batel las bancadas son individuales y se numeran `1…6` / `1…4`. **Vacío = sin restricción** (cualquier puesto de remero). Detalle en la guía.
+Una fila por persona, primera hoja, columnas en este orden: `Nombre · Peso (kg) · Potencia (W, opcional) · Posiciones trainera · Posiciones trainerilla · Posiciones batel`.
+**Cada tipo de barco tiene sus propias posiciones** (el 4 de un batel no es el 4 de una trainera). Códigos separados por comas: en trainera `P` proel, `1B…6B` babor y `1E…6E` estribor; en trainerilla y batel las bancadas son individuales y se numeran `1…6` / `1…4`; `T` (patrón) vale en las tres columnas. **Vacío = sin restricción** en ese tipo. Un código que no existe en el tipo (p. ej. `5` en batel) rechaza la fila. Los Excel del formato anterior (una sola columna de posiciones) se siguen aceptando. Detalle en la guía.
 
 ## Excel de barcos (maestro)
 

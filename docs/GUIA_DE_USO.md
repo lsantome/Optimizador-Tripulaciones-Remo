@@ -40,8 +40,10 @@ Sin maestro, la app funciona con los barcos predefinidos.
 ### Plantilla de remeros
 - **+ Remero**, **Cargar tripulación de ejemplo** (datos ficticios; sustituye la plantilla actual) y **Vaciar**; ambos piden confirmación si ya hay remeros. La app arranca sin ningún remero: hasta que cargues el ejemplo, importes tu Excel o añadas remeros, el banco estará vacío y la pestaña Tripulación mostrará un aviso con un botón para ir a Configuración.
 - Cada persona: nombre, kg, W (opcional), W/kg (calculado) y **posiciones** en las que puede ir.
-  - Sin posiciones marcadas = sin restricción (cualquier puesto de remero del barco, incluido el proel si existe).
-  - Una persona marcada solo como patrón (`T`) no remará nunca.
+  - **Las posiciones son por tipo de barco.** La columna y el desplegable muestran las del barco activo (cabecera «Posiciones · Trainera», «· Batel»…); al cambiar de barco ves las de ese tipo. Cada tipo guarda las suyas y **nunca se copian de un tipo a otro**: el 4 de un batel es un remero ligero y el 4 de una trainera puede ser el más pesado, y proel, 5 y 6 no existen en un batel.
+  - Sin posiciones marcadas en un tipo = sin restricción en ese tipo (cualquier puesto de remero del barco, incluido el proel si existe). «Todas» y «Ninguna» actúan solo sobre el tipo activo.
+  - Una persona marcada solo como patrón (`T`) en un tipo no remará en ese tipo. El patrón se marca por tipo.
+  - Datos guardados con la versión anterior (una sola lista): se migran al abrir la app. `T` pasa a los tres tipos; proel y bancadas con banda a trainera; las bancadas numéricas al tipo individual activo (trainerilla si estaba la trainera). Revisa las posiciones de trainerilla y batel si ya las usabas.
 - **Importar plantilla (Excel)** reemplaza la plantilla actual. **Descargar plantilla Excel** da un modelo.
 
 ### Formato del Excel
@@ -49,11 +51,15 @@ Sin maestro, la app funciona con los barcos predefinidos.
 |---|---|---|
 | A Nombre | texto | sí |
 | B Peso (kg) | número > 0 | sí |
-| C Posiciones | códigos separados por comas: `T, P, 1B, 1E … 6B, 6E`; vacío = sin restricción | no |
-| D Potencia (W) | número > 0 | no |
-| E W/kg | informativo, no se importa | no |
+| C Potencia (W) | número > 0 | no |
+| D Posiciones trainera | `P, 1B, 1E … 6B, 6E, T`; vacío = sin restricción | no |
+| E Posiciones trainerilla | `1 … 6, T`; vacío = sin restricción | no |
+| F Posiciones batel | `1 … 4, T`; vacío = sin restricción | no |
+| G W/kg | informativo, no se importa | no |
 
-Una celda vacía equivale a «sin restricción» (igual que en la app). Si hay texto pero ningún código válido (p. ej. `ZZ`), la fila se rechaza con aviso. La primera fila es la cabecera. Ejemplo: [`examples/plantilla_alineacion_remo.xlsx`](../examples/plantilla_alineacion_remo.xlsx).
+Las columnas de posiciones se localizan por la cabecera (deben contener «trainera», «trainerilla» o «batel»). Una celda vacía equivale a «sin restricción» (igual que en la app). Un código que no existe en ese tipo de barco (p. ej. `5` en batel, `5B` en trainerilla) rechaza la fila con aviso que nombra el tipo. La primera fila es la cabecera.
+
+**Formato anterior** (`Nombre · Peso · Posiciones · Potencia`, una sola columna de posiciones): se sigue aceptando; sus posiciones se reparten entre tipos como en la migración de arriba y la app lo avisa tras importar. Ejemplo del formato actual: [`examples/plantilla_alineacion_remo.xlsx`](../examples/plantilla_alineacion_remo.xlsx).
 
 ## 3. Pestaña «Tripulación»
 
@@ -62,14 +68,14 @@ Una celda vacía equivale a «sin restricción» (igual que en la app). Si hay t
 - **Eslora, manga, puntal, calado y peso del casco:** editables en cualquier momento. La eslora también reposiciona las bancadas.
 - **Restablecer valores:** vuelve a los del tipo o barco elegido.
 - Se avisa si el peso queda por debajo del mínimo del tipo.
-- Cambiar de barco no borra la plantilla de remeros; las posiciones que no existan en el nuevo barco se ignoran (en la tripulación manual se quitan esos puestos). La opción «Todas» de posiciones significa «sin restricción» y vale para cualquier barco.
+- Cambiar de barco no borra la plantilla de remeros ni sus posiciones: cada tipo conserva las suyas. En la tripulación manual se quitan los puestos que no existan en el nuevo barco.
 
 ### Bancadas individuales (trainerilla y batel)
 - El peso de los remeros **no genera desequilibrio lateral** (van sobre el eje): la métrica de bandas de peso muestra «no aplica» y la tabla de cuadrantes reparte el peso solo por proa/popa.
 - La **banda de remada** sí cuenta para la potencia y los W/kg. Alterna de popa a proa; en *Criterios* eliges por qué banda rema la bancada 1 (por defecto babor).
 - No hay parejas: el criterio «Homogeneidad de pareja» no se muestra.
 - En el esquema el remero se dibuja en el eje; el color indica su banda de remada y el puesto vacío muestra, p. ej., `1B` (bancada 1, remada por babor).
-- En el Excel de tripulación, las posiciones de estos barcos son números: `1,2,5`.
+- En el Excel de tripulación, las posiciones de estos barcos son números en su propia columna (trainerilla `1…6`, batel `1…4`): `1,2,5`.
 
 ### Mapa de calor
 Casilla encima de las sub-pestañas. Colorea cada puesto de azul (ligero) a rojo (pesado) pasando por blanco, por **peso** o **potencia**. Desactivado por defecto.
@@ -113,7 +119,8 @@ Arrastra una ficha del **Banco** a un puesto (o pulsa ficha y luego puesto). *Va
 **Abrir alineación guardada** (botón junto a *Exportar a Excel*, en el modo manual) lee esa hoja de datos y te deja en el modo manual con la plantilla, el barco, los ajustes y la tripulación tal como estaban, para cambiar lo que quieras. Ten en cuenta:
 - **Reemplaza** la plantilla, el barco y los ajustes actuales (te pide confirmación antes). Si quieres conservar lo actual, expórtalo antes.
 - Solo se lee la hoja «Datos (no editar)». Lo que cambies a mano en las otras hojas **no** se lee al reabrir.
-- Solo se pueden abrir archivos exportados con la versión 1.5.0 o posterior.
+- Solo se pueden abrir archivos exportados con la versión 1.5.0 o posterior. Los de 1.5.x (una sola lista de posiciones) se abren y sus posiciones se reparten por tipo según el barco del propio archivo; la app lo avisa.
+- Los archivos exportados con 1.6.0 o posterior no se pueden abrir con una versión anterior de la app.
 - Si el barco venía del maestro de barcos y no está en el tuyo, se añade; si ya existe con otras dimensiones, manda el archivo.
 - El archivo contiene nombre, peso y potencia de **toda** la plantilla (no solo de quienes van en el barco): trátalo como dato personal al compartirlo.
 
@@ -128,7 +135,7 @@ Si tienes el APK (se descarga de las *Releases* del repositorio), ábrelo en el 
 
 ## 7. Problemas frecuentes
 - *«No se pudo cargar la librería de Excel»*: estás usando `index.html` sin la carpeta `vendor/` a su lado. Usa la versión autónoma `optimizador-tripulaciones-remo.html` o copia también `vendor/`.
-- *Importé y faltan personas*: revisa el aviso bajo el botón; filas sin nombre, peso válido o posiciones se omiten.
+- *Importé y faltan personas*: revisa el aviso bajo el botón; las filas sin nombre, sin peso válido o con un código de posición que no existe en ese tipo de barco se omiten.
 - *El optimizador necesita remeros suficientes para el barco elegido* (13 en trainera, 6 en trainerilla, 4 en batel, más un patrón con posición `T`).
 - *El optimizador no da 3 propuestas o avisa de datos*: revisa que haya suficientes remeros disponibles, que las posiciones permitidas no sean incompatibles y que, en modo vatios o W/kg, todos tengan potencia.
 - *La app instalada no muestra cambios recientes*: pulsa *Actualizar* en el aviso, o ciérrala y ábrela de nuevo; la versión nueva se descarga al volver a primer plano. Para comprobar qué versión tienes, mira el pie de la página: `v1.x.x · build <commit> · <fecha>`; compáralo con el de otro dispositivo o con el último despliegue en GitHub Actions.
