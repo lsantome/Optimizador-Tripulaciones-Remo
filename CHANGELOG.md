@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); las versiones siguen [SemVer](https://semver.org/lang/es/).
 La versión de `package.json` es la fuente de verdad: la etiqueta de Git `vX.Y.Z` debe coincidir con ella (el workflow de Android lo comprueba).
 
+## [1.6.0] - 2026-11-09
+
+### Changed
+- **Las posiciones de cada remero son por tipo de barco.** Antes había una sola lista de posiciones válida para todos los barcos, así que quien tenía restringido el proel, el 5 o el 6 de la trainera quedaba excluido (o con un resultado sin sentido) en trainerilla y batel, y un «4» valía lo mismo en cualquier barco aunque en un batel sea un remero ligero y en una trainera pueda ser el más pesado. Ahora cada persona guarda tres listas (trainera, trainerilla, batel); cada tipo usa la suya y nunca se copian de un tipo a otro. Vacío = sin restricción en ese tipo. La columna de la plantilla y su desplegable muestran las del barco activo. **La trainera da los mismos resultados que antes.**
+- **Excel de tripulación:** nuevo orden de columnas `Nombre · Peso · Potencia · Posiciones trainera · Posiciones trainerilla · Posiciones batel`, localizadas por la cabecera. Un código que no existe en el tipo (p. ej. `5` en batel) rechaza la fila y el aviso nombra el tipo. La plantilla de ejemplo se ha regenerado.
+- **Alineación guardada: formato de datos 2** (una columna de posiciones por tipo). Los archivos del formato 1 (1.5.x) se siguen abriendo y se avisa del reparto de posiciones; los de formato 2 no se abren con versiones anteriores de la app.
+
+### Added
+- **Migración automática** de lo guardado en el formato anterior (lista plana), que se persiste al abrir la app: `T` pasa a los tres tipos; proel y bancadas con banda a trainera; las bancadas numéricas al tipo individual que estuviera activo (trainerilla si era la trainera). **Revisa las posiciones de trainerilla y batel si ya las usabas.**
+- Los Excel de tripulación del formato anterior (una sola columna de posiciones) se siguen importando con el mismo reparto, con un aviso.
+- Pruebas: migración, independencia entre tipos, importación por tipo y rechazo de códigos de otro tipo, apertura del formato 1 de la alineación guardada e ida y vuelta con restricciones distintas por tipo.
+
 ## [1.5.1] - 2026-11-09
 
 ### Changed

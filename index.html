@@ -328,6 +328,7 @@
     width:236px; box-shadow:0 10px 26px rgba(0,0,0,0.5);
   }
   .pos-panel.open{display:block;}
+  .pos-panel-titulo{font-size:11px; color:var(--text-dim); margin-bottom:8px; line-height:1.35;}
   .pos-panel-actions{display:flex; gap:6px; margin-bottom:8px;}
   .pos-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:5px;}
   .pos-chip{
@@ -396,7 +397,7 @@
     <span class="import-status" id="importStatus"></span>
   </div>
   <div class="note-box" style="margin-bottom:20px;">
-    <b>Formato del Excel:</b> una fila por remero, 4 columnas en este orden — nombre · peso (kg) · posiciones · potencia (W). Nombre y peso son obligatorios (posiciones vacías = sin restricción, puede ir en cualquier puesto de remero); si falta alguno de los obligatorios, esa fila se rechaza y se avisa. Potencia es opcional. Posiciones se escribe con códigos separados por comas, sin espacios que importen: <b>1B, 1E, 2B, 2E, 3B, 3E, 4B, 4E, 5B, 5E, 6B, 6E</b> (bancada + banda), <b>P</b> (proel), <b>T</b> (patrón). Ejemplo: <span style="font-family:var(--font-mono)">3E,4E,5E</span>. En <b>trainerilla y batel</b> (bancadas individuales sobre el eje) las posiciones son números, de popa a proa: 1, 2, 3… (p. ej. 1,2,5). El patrón ya no es una lista aparte: cualquier remero con <b>T</b> entre sus posiciones (y peso suficiente) es candidato a patrón. Una 5ª columna opcional de W/kg es solo informativa: se ignora al importar. Importar sustituye la plantilla actual.
+    <b>Formato del Excel:</b> una fila por remero, 6 columnas en este orden — nombre · peso (kg) · potencia (W) · posiciones trainera · posiciones trainerilla · posiciones batel. Nombre y peso son obligatorios; si falta alguno, esa fila se rechaza y se avisa. Potencia es opcional. <b>Cada tipo de barco tiene sus propias posiciones</b> (el 4 de un batel no es el 4 de una trainera) y una columna vacía = sin restricción en ese tipo (puede ir en cualquier puesto de remero). Códigos separados por comas: en <b>trainera</b> <b>1B, 1E, 2B, 2E, 3B, 3E, 4B, 4E, 5B, 5E, 6B, 6E</b> (bancada + banda) y <b>P</b> (proel); en <b>trainerilla y batel</b> (bancadas individuales sobre el eje) números de popa a proa (1–6 y 1–4); <b>T</b> (patrón) vale en las tres columnas. Un código que no existe en ese barco (p. ej. 5 en batel) rechaza la fila. Ejemplo trainera: <span style="font-family:var(--font-mono)">3E,4E,5E</span>. El patrón no es una lista aparte: cualquier remero con <b>T</b> en el barco activo (y peso suficiente) es candidato. Una 7ª columna opcional de W/kg es solo informativa. Los Excel del formato anterior (una sola columna de posiciones) se siguen aceptando y se reparten entre tipos. Importar sustituye la plantilla actual.
   </div>
 
   <section class="panel">
@@ -411,7 +412,7 @@
     </div>
     <div style="overflow-x:auto;">
       <table class="rower-table">
-        <thead><tr><th>Nombre</th><th class="col-peso">Kg</th><th class="col-pot">W</th><th class="col-wkg">W/kg</th><th class="col-pos">Posiciones</th><th class="col-del"></th></tr></thead>
+        <thead><tr><th>Nombre</th><th class="col-peso">Kg</th><th class="col-pot">W</th><th class="col-wkg">W/kg</th><th class="col-pos" id="thPosiciones" title="Cada tipo de barco tiene sus propias posiciones">Posiciones</th><th class="col-del"></th></tr></thead>
         <tbody id="poolTbodyRemeros"></tbody>
       </table>
     </div>
@@ -739,12 +740,59 @@ function remerosDisponibles(){
   return state.remeros.filter(function(r){ return r.disponible !== false; });
 }
 
+/* Posiciones por tipo de barco: remero.posiciones = {trainera:[ids], trainerilla:[ids], batel:[ids]}.
+   Una lista vacía = sin restricción en ese tipo. Los puestos NO son equivalentes entre tipos (el 4 de un batel es un remero
+   ligero; el 4 de una trainera puede ser el más pesado), así que cada tipo guarda su propia lista y nunca se copian de uno a otro. */
+function posicionesVacias(){
+  const o = {};
+  ORDEN_TIPOS.forEach(function(k){ o[k] = []; });
+  return o;
+}
+const IDS_PUESTOS = {};
+function idsDePuestos(tipo){
+  if(!IDS_PUESTOS[tipo]) IDS_PUESTOS[tipo] = construirSlots(tipo, TIPOS_BARCO[tipo].eslora, 'babor').map(function(s){ return s.id; });
+  return IDS_PUESTOS[tipo];
+}
+/* Formato antiguo (lista plana): 'patron' vale para todos los tipos; proel y bancadas b* son de trainera; las bancadas
+   individuales e* van al tipo individual que estuviera activo (trainerilla si era trainera). Lo que no existe en el tipo destino se descarta. */
+function migrarPosicionesLegacy(ids, tipoActivo){
+  const salida = posicionesVacias();
+  if(!Array.isArray(ids)) return salida;
+  const individual = (TIPOS_BARCO[tipoActivo] && TIPOS_BARCO[tipoActivo].individual) ? tipoActivo : 'trainerilla';
+  ids.forEach(function(id){
+    if(typeof id !== 'string') return;
+    let destinos;
+    if(id === 'patron') destinos = ORDEN_TIPOS;
+    else if(/^e\d+$/.test(id)) destinos = idsDePuestos(individual).indexOf(id) !== -1 ? [individual] : ['trainerilla'];
+    else destinos = ['trainera'];
+    destinos.forEach(function(t){
+      if(idsDePuestos(t).indexOf(id) !== -1 && salida[t].indexOf(id) === -1) salida[t].push(id);
+    });
+  });
+  return salida;
+}
+function normalizarPosiciones(r){
+  const p = r.posiciones;
+  if(Array.isArray(p)) r.posiciones = migrarPosicionesLegacy(p, state.config.tipoBarco);
+  else if(!p || typeof p !== 'object') r.posiciones = posicionesVacias();
+  else ORDEN_TIPOS.forEach(function(k){
+    p[k] = Array.isArray(p[k]) ? p[k].filter(function(id, i, a){ return idsDePuestos(k).indexOf(id) !== -1 && a.indexOf(id) === i; }) : [];
+  });
+  return r.posiciones;
+}
+function posDe(r, tipo){
+  const p = r.posiciones;
+  if(p && !Array.isArray(p) && typeof p === 'object' && Array.isArray(p[tipo])) return p[tipo];
+  return normalizarPosiciones(r)[tipo];
+}
+function ponerPos(r, ids){ normalizarPosiciones(r)[state.config.tipoBarco] = ids; } // escribe solo en la lista del barco activo
 function posicionesPermitidas(remero){
-  return (remero.posiciones && remero.posiciones.length > 0) ? remero.posiciones : null; // null = sin restricción (todos los puestos de remero del barco)
+  const p = posDe(remero, state.config.tipoBarco);
+  return p.length > 0 ? p : null; // null = sin restricción (todos los puestos de remero del barco)
 }
 function esCompatible(remero, slotId){
   if(slotId === 'patron'){
-    return !!(remero.posiciones && remero.posiciones.indexOf('patron') !== -1);
+    return posDe(remero, state.config.tipoBarco).indexOf('patron') !== -1;
   }
   const permitidas = posicionesPermitidas(remero);
   return permitidas === null || permitidas.indexOf(slotId) !== -1;
@@ -1473,6 +1521,11 @@ async function cargarDatos(){
     }
   }catch(e){}
   if(!TIPOS_BARCO[state.config.tipoBarco]) state.config.tipoBarco = 'trainera';
+  // posiciones por tipo de barco: lo guardado en formato antiguo (lista plana) se migra una vez y se persiste enseguida,
+  // porque la migración depende del tipo de barco activo en este momento
+  const hayAntiguo = state.remeros.some(function(r){ return Array.isArray(r.posiciones); });
+  state.remeros.forEach(normalizarPosiciones);
+  if(hayAntiguo) await guardarRemeros();
   if(state.config.bandaInicio !== 'estribor') state.config.bandaInicio = 'babor';
   if(state.config.barcoId && !barcoMaestroActivo()) state.config.barcoId = '';
   reconstruirSlots();
@@ -1488,27 +1541,29 @@ function guardarManual(){ return storageSet('tripulacion-manual', JSON.stringify
 
 /* ============================ DATOS DE EJEMPLO ============================ */
 
+function posTrainera(ids){ const o = posicionesVacias(); o.trainera = ids; return o; }
+function posTodos(ids){ const o = posicionesVacias(); ORDEN_TIPOS.forEach(function(k){ o[k] = ids.slice(); }); return o; }
 function cargarEjemplo(persistir){
   state.remeros = [
-    {id:nuevoId(), nombre:'Ander Etxeberria', peso:82, potencia:305, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Jon Aramburu',      peso:88, potencia:320, disponible:true, posiciones:['b3_est','b4_est','b5_est']},
-    {id:nuevoId(), nombre:'Mikel Zubiaurre',   peso:79, potencia:295, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Iker Larrañaga',    peso:68, potencia:255, disponible:true, posiciones:['b6_bab','b6_est','proel']},
-    {id:nuevoId(), nombre:'Aitor Mendizabal',  peso:85, potencia:310, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Unai Goikoetxea',   peso:76, potencia:280, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Xabier Otxoa',      peso:83, potencia:300, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Peio Urrutia',      peso:89, potencia:325, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Eneko Bilbao',      peso:74, potencia:270, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Gorka Iturbe',      peso:87, potencia:315, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Asier Errasti',     peso:80, potencia:292, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Julen Sasiain',     peso:84, potencia:308, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Markel Loiola',     peso:78, potencia:288, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Beñat Muxika',      peso:90, potencia:335, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Xanti Arregi',      peso:81, potencia:298, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Ibon Zelaieta',     peso:86, potencia:312, disponible:true, posiciones:[]},
-    {id:nuevoId(), nombre:'Iñaki Sagastume',   peso:64, potencia:undefined, disponible:true, posiciones:['patron']},
-    {id:nuevoId(), nombre:'Nagore Uranga',     peso:57, potencia:undefined, disponible:true, posiciones:['patron']},
-    {id:nuevoId(), nombre:'Oier Mutiloa',      peso:69, potencia:undefined, disponible:true, posiciones:['patron']}
+    {id:nuevoId(), nombre:'Ander Etxeberria', peso:82, potencia:305, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Jon Aramburu',      peso:88, potencia:320, disponible:true, posiciones:posTrainera(['b3_est','b4_est','b5_est'])},
+    {id:nuevoId(), nombre:'Mikel Zubiaurre',   peso:79, potencia:295, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Iker Larrañaga',    peso:68, potencia:255, disponible:true, posiciones:posTrainera(['b6_bab','b6_est','proel'])},
+    {id:nuevoId(), nombre:'Aitor Mendizabal',  peso:85, potencia:310, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Unai Goikoetxea',   peso:76, potencia:280, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Xabier Otxoa',      peso:83, potencia:300, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Peio Urrutia',      peso:89, potencia:325, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Eneko Bilbao',      peso:74, potencia:270, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Gorka Iturbe',      peso:87, potencia:315, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Asier Errasti',     peso:80, potencia:292, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Julen Sasiain',     peso:84, potencia:308, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Markel Loiola',     peso:78, potencia:288, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Beñat Muxika',      peso:90, potencia:335, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Xanti Arregi',      peso:81, potencia:298, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Ibon Zelaieta',     peso:86, potencia:312, disponible:true, posiciones:posicionesVacias()},
+    {id:nuevoId(), nombre:'Iñaki Sagastume',   peso:64, potencia:undefined, disponible:true, posiciones:posTodos(['patron'])},
+    {id:nuevoId(), nombre:'Nagore Uranga',     peso:57, potencia:undefined, disponible:true, posiciones:posTodos(['patron'])},
+    {id:nuevoId(), nombre:'Oier Mutiloa',      peso:69, potencia:undefined, disponible:true, posiciones:posTodos(['patron'])}
   ];
   state.resultadosAuto = [];
   state.asignacionManual = {};
@@ -1544,12 +1599,85 @@ function parsearPosicionesExcel(texto){
   });
   return resultado;
 }
-function posicionesAExcel(remero){
-  if(!remero.posiciones || remero.posiciones.length === 0) return '';
-  return remero.posiciones.map(function(id){ return SLOT_A_CODIGO[id] || id; }).join(',');
+/* Parseo estricto para un tipo concreto: un código que no existe en ese tipo (p. ej. 5B en un batel) va a «invalidos». */
+function parsearPosicionesTipo(texto, tipo){
+  const ids = [], invalidos = [];
+  if(texto === undefined || texto === null) return {ids: ids, invalidos: invalidos};
+  const validos = idsDePuestos(tipo);
+  String(texto).split(',').map(function(x){ return x.trim().toUpperCase(); }).filter(function(x){ return x.length > 0; }).forEach(function(codigo){
+    const id = CODIGO_A_SLOT[codigo];
+    if(!id || validos.indexOf(id) === -1){ if(invalidos.indexOf(codigo) === -1) invalidos.push(codigo); }
+    else if(ids.indexOf(id) === -1) ids.push(id);
+  });
+  return {ids: ids, invalidos: invalidos};
+}
+function posicionesAExcel(remero, tipo){
+  return posDe(remero, tipo).map(function(id){ return SLOT_A_CODIGO[id] || id; }).join(',');
+}
+
+/* Columnas de posiciones por tipo según la cabecera (formato actual). null = formato anterior (una sola columna de posiciones). */
+function columnasPorTipo(cabecera){
+  const col = {};
+  let hay = false;
+  ORDEN_TIPOS.forEach(function(k){
+    for(let c = 2; c < (cabecera || []).length; c++){
+      if(String(cabecera[c]).toLowerCase().indexOf(k) !== -1){ col[k] = c; hay = true; break; }
+    }
+  });
+  return hay ? col : null;
 }
 
 function procesarFilasExcel(filas){
+  const cabecera = filas[0] || [];
+  const cols = columnasPorTipo(cabecera);
+  if(cols !== null) return procesarFilasPorTipo(filas, cols);
+  const res = procesarFilasAnterior(filas);
+  res.formatoAnterior = true;
+  return res;
+}
+
+/* Formato actual: nombre | peso | potencia | posiciones trainera | posiciones trainerilla | posiciones batel | [W/kg informativo] */
+function procesarFilasPorTipo(filas, cols){
+  const nuevosRemeros = [];
+  const errores = [];
+  let iPot = 2;
+  for(let c = 2; c < filas[0].length; c++){ if(String(filas[0][c]).toLowerCase().indexOf('potencia') !== -1){ iPot = c; break; } }
+  for(let i=1; i<filas.length; i++){
+    const fila = filas[i];
+    if(!fila) continue;
+    if(!fila.some(function(c){ return c !== undefined && c !== null && String(c).trim() !== ''; })) continue;
+    const filaNum = i+1;
+    const nombre = (fila[0] !== undefined && fila[0] !== null) ? String(fila[0]).trim() : '';
+    const peso = Number(fila[1]);
+    const potencia = Number(fila[iPot]);
+    const ref = nombre || ('la fila ' + filaNum);
+    if(!nombre){ errores.push('Falta el nombre en la fila ' + filaNum + '.'); continue; }
+    if(!isFinite(peso) || peso <= 0){ errores.push('"' + ref + '": falta el peso o no es válido.'); continue; }
+    const posiciones = posicionesVacias();
+    let fallo = false;
+    ORDEN_TIPOS.forEach(function(k){
+      if(fallo || cols[k] === undefined) return;
+      const r = parsearPosicionesTipo(fila[cols[k]], k);
+      if(r.invalidos.length > 0){
+        errores.push('"' + ref + '": posiciones no válidas para ' + TIPOS_BARCO[k].label.toLowerCase() + ' (' + r.invalidos.join(', ') + ').');
+        fallo = true;
+        return;
+      }
+      posiciones[k] = r.ids;
+    });
+    if(fallo) continue;
+    nuevosRemeros.push({
+      id: nuevoId(), nombre: nombre, peso: peso, posiciones: posiciones,
+      potencia: (isFinite(potencia) && potencia > 0) ? potencia : undefined,
+      disponible: true
+    });
+  }
+  return {remeros: nuevosRemeros, errores: errores, formatoAnterior: false};
+}
+
+/* Formato anterior (hasta 1.5.x): nombre | peso | posiciones | potencia | [W/kg informativo]. Una sola lista de posiciones:
+   se reparte entre tipos con migrarPosicionesLegacy. */
+function procesarFilasAnterior(filas){
   const nuevosRemeros = [];
   const errores = [];
   for(let i=1; i<filas.length; i++){
@@ -1573,7 +1701,7 @@ function procesarFilasExcel(filas){
     if(textoPos !== '' && posiciones.length === 0){ errores.push('"' + ref + '": ninguna posición reconocida (' + textoPos + ').'); continue; }
 
     nuevosRemeros.push({
-      id: nuevoId(), nombre: nombre, peso: peso, posiciones: posiciones,
+      id: nuevoId(), nombre: nombre, peso: peso, posiciones: migrarPosicionesLegacy(posiciones, state.config.tipoBarco),
       potencia: (isFinite(potencia) && potencia > 0) ? potencia : undefined,
       disponible: true
     });
@@ -1613,7 +1741,11 @@ function manejarArchivoExcel(file){
       renderTablaRemeros();
       let msg = 'Importados ' + res.remeros.length + ' remeros.';
       if(res.errores.length > 0){ msg += ' Se omitieron ' + res.errores.length + ' fila(s): ' + res.errores.join(' '); }
-      mostrarEstadoImport(msg, res.errores.length > 0 ? 'warn' : 'ok');
+      if(res.formatoAnterior){
+        const ind = tipoActual().individual ? tipoActual() : TIPOS_BARCO.trainerilla;
+        msg += ' Formato anterior (una sola columna de posiciones): «T» vale para todos los barcos, los puestos con banda (1B…6E) y «P» se han aplicado a la trainera y los numéricos a ' + ind.label.toLowerCase() + '. Descarga la plantilla nueva para fijar posiciones distintas por tipo de barco.';
+      }
+      mostrarEstadoImport(msg, (res.errores.length > 0 || res.formatoAnterior) ? 'warn' : 'ok');
     }catch(err){
       console.error(err);
       mostrarEstadoImport('No se pudo leer el archivo. Comprueba que es un .xlsx válido con el formato indicado.', 'warn');
@@ -1629,14 +1761,15 @@ function descargarPlantillaExcel(){
     return;
   }
   const datos = [
-    ['Nombre remero', 'Peso (kg)', 'Posiciones', 'Potencia (W)', 'W/kg (informativo, no se importa)'],
-    ['Ander Etxeberria', 82, '', 305, (305/82).toFixed(2)],
-    ['Jon Aramburu', 88, '3E,4E,5E', 320, (320/88).toFixed(2)],
-    ['Iker Larrañaga', 68, '6B,6E,P', '', ''],
-    ['Iñaki Sagastume', 64, 'T', '', '']
+    ['Nombre remero', 'Peso (kg)', 'Potencia (W)', 'Posiciones trainera', 'Posiciones trainerilla', 'Posiciones batel', 'W/kg (informativo, no se importa)'],
+    ['Ander Etxeberria', 82, 305, '', '', '', (305/82).toFixed(2)],
+    ['Jon Aramburu', 88, 320, '3E,4E,5E', '', '', (320/88).toFixed(2)],
+    ['Iker Larrañaga', 68, '', '6B,6E,P', '', '', ''],
+    ['Eneko Bilbao', 74, 270, '', '', '4', (270/74).toFixed(2)],
+    ['Iñaki Sagastume', 64, '', 'T', 'T', 'T', '']
   ];
   const ws = XLSX.utils.aoa_to_sheet(datos);
-  ws['!cols'] = [{wch:22},{wch:11},{wch:26},{wch:12},{wch:24}];
+  ws['!cols'] = [{wch:22},{wch:11},{wch:12},{wch:22},{wch:22},{wch:18},{wch:24}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
   guardarXlsx(wb, 'plantilla_alineacion_remo.xlsx');
@@ -1726,7 +1859,7 @@ function exportarTripulacionExcel(asignacion, nombreArchivo, idEstado){
   wsR['!cols'] = [{wch:42},{wch:20}];
   XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
   const wsD = XLSX.utils.aoa_to_sheet(filasDatosAlineacion(asignacion));
-  wsD['!cols'] = [{wch:16},{wch:18},{wch:24},{wch:10},{wch:12},{wch:24},{wch:11}];
+  wsD['!cols'] = [{wch:16},{wch:18},{wch:24},{wch:10},{wch:12},{wch:22},{wch:22},{wch:18},{wch:11}];
   XLSX.utils.book_append_sheet(wb, wsD, HOJA_DATOS);
   guardarXlsx(wb, nombreArchivo || 'tripulacion.xlsx', idEstado);
 }
@@ -1738,12 +1871,13 @@ function exportarTripulacionExcel(asignacion, nombreArchivo, idEstado){
    Formato (una fila por dato; no hay JSON en una celda porque Excel limita la celda a 32.767 caracteres):
      fila 1:  MARCA_DATOS | formato | versión de la app | fecha ISO
      AJUSTE   | clave | valor                          (barcoNombre + AJUSTES_TEXTO + AJUSTES_NUM)
-     REMERO   | n | nombre | peso | potencia | posiciones (códigos del Excel de tripulación) | disponible 1/0
+     REMERO   | n | nombre | peso | potencia | posiciones trainera | posiciones trainerilla | posiciones batel | disponible 1/0
+              (formato 1: una sola columna de posiciones y después disponible; se sigue leyendo)
      PUESTO   | id del puesto | n del remero
    Si cambia el formato, sube FORMATO_DATOS (la app rechaza archivos con un formato más nuevo que el suyo). */
 const HOJA_DATOS = 'Datos (no editar)';
 const MARCA_DATOS = 'OAR-ALINEACION';
-const FORMATO_DATOS = 1;
+const FORMATO_DATOS = 2;
 const AJUSTES_TEXTO = {
   categoria: function(){ return Object.keys(CATEGORIAS); },
   tipoBarco: function(){ return Object.keys(TIPOS_BARCO); },
@@ -1769,19 +1903,19 @@ function filasDatosAlineacion(asignacion){
   const c = state.config, b = barcoMaestroActivo();
   const filas = [
     [MARCA_DATOS, FORMATO_DATOS, versionAppTexto(), new Date().toISOString()],
-    ['Hoja de datos para volver a abrir esta alineación en la app (botón «Abrir alineación guardada»). No la edites: los cambios en las otras hojas no se leen.', '', '', '', '', '', ''],
-    ['AJUSTE', 'barcoNombre', b ? b.nombre : '', '', '', '', '']
+    ['Hoja de datos para volver a abrir esta alineación en la app (botón «Abrir alineación guardada»). No la edites: los cambios en las otras hojas no se leen.', '', '', '', '', '', '', '', ''],
+    ['AJUSTE', 'barcoNombre', b ? b.nombre : '', '', '', '', '', '', '']
   ];
-  Object.keys(AJUSTES_TEXTO).forEach(function(k){ filas.push(['AJUSTE', k, c[k], '', '', '', '']); });
-  AJUSTES_NUM.forEach(function(a){ filas.push(['AJUSTE', a[0], c[a[0]], '', '', '', '']); });
+  Object.keys(AJUSTES_TEXTO).forEach(function(k){ filas.push(['AJUSTE', k, c[k], '', '', '', '', '', '']); });
+  AJUSTES_NUM.forEach(function(a){ filas.push(['AJUSTE', a[0], c[a[0]], '', '', '', '', '', '']); });
   const indice = {};
   state.remeros.forEach(function(r, i){
     indice[r.id] = i + 1;
-    filas.push(['REMERO', i + 1, r.nombre, r.peso, (r.potencia !== undefined && r.potencia !== null) ? r.potencia : '', posicionesAExcel(r), r.disponible === false ? 0 : 1]);
+    filas.push(['REMERO', i + 1, r.nombre, r.peso, (r.potencia !== undefined && r.potencia !== null) ? r.potencia : '', posicionesAExcel(r, 'trainera'), posicionesAExcel(r, 'trainerilla'), posicionesAExcel(r, 'batel'), r.disponible === false ? 0 : 1]);
   });
   SLOTS.forEach(function(slot){
     const n = asignacion[slot.id] ? indice[asignacion[slot.id]] : undefined;
-    if(n) filas.push(['PUESTO', slot.id, n, '', '', '', '']);
+    if(n) filas.push(['PUESTO', slot.id, n, '', '', '', '', '', '']);
   });
   return filas;
 }
@@ -1819,14 +1953,31 @@ function leerAlineacionGuardada(wb){
       avisos.push('Ajuste desconocido «' + k + '» (se ignora).');
     } else if(tipo === 'REMERO'){
       const n = Number(f[1]), nombre = String(f[2]).trim(), peso = parseNumeroExcel(f[3]), pot = parseNumeroExcel(f[4]);
-      const textoPos = String(f[5]).trim();
       if(!isFinite(n) || n < 1 || remeros[n - 1] !== undefined) { errores.push('Fila ' + fila + ': número de remero repetido o no válido.'); continue; }
       if(!nombre){ errores.push('Fila ' + fila + ': remero sin nombre.'); continue; }
       if(peso === undefined || !isFinite(peso) || peso <= 0){ errores.push('«' + nombre + '»: peso no válido.'); continue; }
       if(pot !== undefined && (!isFinite(pot) || pot <= 0)){ errores.push('«' + nombre + '»: potencia no válida.'); continue; }
-      const posiciones = parsearPosicionesExcel(textoPos);
-      if(textoPos !== '' && posiciones.length !== textoPos.split(',').map(function(x){ return x.trim(); }).filter(Boolean).length) { errores.push('«' + nombre + '»: posiciones no reconocidas (' + textoPos + ').'); continue; }
-      remeros[n - 1] = {nombre: nombre, peso: peso, potencia: pot, posiciones: posiciones, disponible: Number(f[6]) !== 0};
+      let posiciones, disponible;
+      if(formato === 1){
+        // una sola lista: se reparte según el tipo de barco del propio archivo (se lee después, así que se guarda el texto)
+        const textoPos = String(f[5]).trim();
+        const ids = parsearPosicionesExcel(textoPos);
+        if(textoPos !== '' && ids.length !== textoPos.split(',').map(function(x){ return x.trim(); }).filter(Boolean).length) { errores.push('«' + nombre + '»: posiciones no reconocidas (' + textoPos + ').'); continue; }
+        posiciones = ids;
+        disponible = Number(f[6]) !== 0;
+      } else {
+        posiciones = posicionesVacias();
+        let fallo = false;
+        ORDEN_TIPOS.forEach(function(k, j){
+          if(fallo) return;
+          const r = parsearPosicionesTipo(f[5 + j], k);
+          if(r.invalidos.length > 0){ errores.push('«' + nombre + '»: posiciones no válidas para ' + TIPOS_BARCO[k].label.toLowerCase() + ' (' + r.invalidos.join(', ') + ').'); fallo = true; return; }
+          posiciones[k] = r.ids;
+        });
+        if(fallo) continue;
+        disponible = Number(f[8]) !== 0;
+      }
+      remeros[n - 1] = {nombre: nombre, peso: peso, potencia: pot, posiciones: posiciones, disponible: disponible};
     } else if(tipo === 'PUESTO'){
       puestosFila.push({fila: fila, slot: String(f[1]).trim(), n: Number(f[2])});
     }
@@ -1837,6 +1988,10 @@ function leerAlineacionGuardada(wb){
     });
     for(let j = 0; j < remeros.length; j++) if(remeros[j] === undefined) { errores.push('Faltan remeros en la numeración (hueco en el nº ' + (j + 1) + ').'); break; }
     if(remeros.length === 0) errores.push('El archivo no contiene ningún remero.');
+  }
+  if(errores.length === 0 && formato === 1){
+    remeros.forEach(function(r){ r.posiciones = migrarPosicionesLegacy(r.posiciones, cfg.tipoBarco); });
+    avisos.push('Archivo del formato anterior: las posiciones se han repartido por tipo de barco (revísalas en la plantilla).');
   }
   const puestos = {};
   if(errores.length === 0){
@@ -1932,8 +2087,8 @@ function calcWkg(r){
   return (r.peso > 0 && tienePotenciaValida(r)) ? (r.potencia / r.peso).toFixed(2) : '—';
 }
 function resumenPosiciones(remero){
-  const p = remero.posiciones;
-  if(!p || p.length === 0) return 'Todas';
+  const p = posDe(remero, state.config.tipoBarco);
+  if(p.length === 0) return 'Todas';
   return p.map(function(id){
     const s = SLOTS.find(function(x){ return x.id === id; });
     return s ? s.short : (SLOT_A_CODIGO[id] || id);
@@ -1947,6 +2102,8 @@ function renderTablaRemeros(){
   if(aviso) aviso.style.display = state.remeros.length === 0 ? '' : 'none';
   const tbody = document.getElementById('poolTbodyRemeros');
   tbody.innerHTML = '';
+  const thPos = document.getElementById('thPosiciones');
+  if(thPos) thPos.textContent = 'Posiciones · ' + tipoActual().label;
   state.remeros.forEach(function(r){
     const tr = document.createElement('tr');
 
@@ -1987,6 +2144,9 @@ function renderTablaRemeros(){
     const panelPos = document.createElement('div');
     panelPos.className = 'pos-panel';
 
+    const panelTitulo = document.createElement('div');
+    panelTitulo.className = 'pos-panel-titulo';
+    panelTitulo.textContent = 'Posiciones en ' + tipoActual().label.toLowerCase() + ' (cada tipo de barco tiene las suyas)';
     const panelActions = document.createElement('div');
     panelActions.className = 'pos-panel-actions';
     const btnTodas = document.createElement('button');
@@ -1998,7 +2158,7 @@ function renderTablaRemeros(){
     const grid = document.createElement('div');
     grid.className = 'pos-grid';
     function actualizarChipsPos(){
-      const actuales = (r.posiciones || []);
+      const actuales = posDe(r, state.config.tipoBarco);
       grid.querySelectorAll('.pos-chip').forEach(function(chip){
         const sid = chip.getAttribute('data-slot-id');
         chip.classList.toggle('on', actuales.indexOf(sid) !== -1);
@@ -2010,10 +2170,10 @@ function renderTablaRemeros(){
       chip.textContent = slot.id==='patron' ? 'T · Patrón' : slot.short;
       chip.setAttribute('data-slot-id', slot.id);
       chip.addEventListener('click', function(){
-        const actuales = (r.posiciones || []).slice();
+        const actuales = posDe(r, state.config.tipoBarco).slice();
         const idx = actuales.indexOf(slot.id);
         if(idx === -1) actuales.push(slot.id); else actuales.splice(idx,1);
-        r.posiciones = actuales;
+        ponerPos(r, actuales);
         guardarRemeros(); actualizarChipsPos(); btnPos.textContent = resumenPosiciones(r); actualizarMetaPlantilla();
       });
       grid.appendChild(chip);
@@ -2021,14 +2181,15 @@ function renderTablaRemeros(){
     actualizarChipsPos();
 
     btnTodas.addEventListener('click', function(){
-      r.posiciones = []; // vacío = sin restricción: vale para cualquier barco
+      ponerPos(r, []); // vacío = sin restricción en el barco activo (las de otros tipos no se tocan)
       guardarRemeros(); actualizarChipsPos(); btnPos.textContent = resumenPosiciones(r); actualizarMetaPlantilla();
     });
     btnNinguna.addEventListener('click', function(){
-      r.posiciones = [];
+      ponerPos(r, []);
       guardarRemeros(); actualizarChipsPos(); btnPos.textContent = resumenPosiciones(r); actualizarMetaPlantilla();
     });
 
+    panelPos.appendChild(panelTitulo);
     panelPos.appendChild(panelActions);
     panelPos.appendChild(grid);
     btnPos.addEventListener('click', function(e){
@@ -2065,7 +2226,7 @@ function actualizarMetaPlantilla(){
 
   const nRem = SLOTS_REMERO.length;
   let msg = state.remeros.length + ' en plantilla · ' + tipoActual().label + ': se necesitan ' + nRem + ' remeros + 1 patrón (posición «T», ≥ ' + min + ' kg)';
-  const sinPuesto = remerosDisponibles().filter(function(r){ return contarCompatibles(r) === 0 && !(r.posiciones && r.posiciones.indexOf('patron') !== -1); }).length;
+  const sinPuesto = remerosDisponibles().filter(function(r){ return contarCompatibles(r) === 0 && !esCompatible(r, 'patron'); }).length;
   const problema = (disp.length < nRem) || (elegiblesPatron === 0);
   metaR.className = 'pool-meta' + (problema ? ' warn' : '');
   if(disp.length < nRem) msg += ' · disponibles: ' + disp.length;
@@ -2505,7 +2666,7 @@ function renderBanco(){
   const banco = state.remeros.filter(function(r){ return !idsEnBarco.has(r.id); });
 
   function chipHtml(persona){
-    const candidatoPatron = persona.posiciones && persona.posiciones.indexOf('patron') !== -1;
+    const candidatoPatron = esCompatible(persona, 'patron');
     const bajoPeso = candidatoPatron && persona.peso < pesoMinPatron();
     const partes = [];
     if(puedeRemar(persona)){
@@ -2638,7 +2799,7 @@ function bind(){
   });
 
   document.getElementById('btnAddRemero').addEventListener('click', function(){
-    state.remeros.push({id:nuevoId(), nombre:'Nuevo remero', peso:80, potencia:undefined, disponible:true, posiciones:[]});
+    state.remeros.push({id:nuevoId(), nombre:'Nuevo remero', peso:80, potencia:undefined, disponible:true, posiciones:posicionesVacias()});
     guardarRemeros(); renderTablaRemeros();
   });
   document.getElementById('btnExample').addEventListener('click', function(){

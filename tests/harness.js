@@ -82,7 +82,7 @@ const test = `
     state.remeros = [];
     const asig = {};
     SLOTS.forEach((s, i) => {
-      const p = {id: 'x' + i, nombre: 'P' + i, peso: s.role === 'patron' ? 60 : 70 + 10 * i, potencia: s.role === 'patron' ? undefined : 200 + 20 * i, posiciones: s.role === 'patron' ? ['patron'] : [], disponible: true};
+      const p = {id: 'x' + i, nombre: 'P' + i, peso: s.role === 'patron' ? 60 : 70 + 10 * i, potencia: s.role === 'patron' ? undefined : 200 + 20 * i, posiciones: s.role === 'patron' ? posTodos(['patron']) : posicionesVacias(), disponible: true};
       state.remeros.push(p); asig[s.id] = p.id;
     });
     const ev = evaluar(asig, calcularPotenciaRef());
@@ -105,15 +105,19 @@ const test = `
   });
 
   // ---------- reglas de dominio ----------
-  assert(!puedeRemar({posiciones:['patron']}), 'un patrón puro no debe remar');
+  assert(!puedeRemar({posiciones: posTodos(['patron'])}), 'un patrón puro no debe remar');
 
   // ---------- importación de tripulación ----------
+  const tipoAntesImport = state.config.tipoBarco; state.config.tipoBarco = 'batel'; // el formato anterior reparte las bancadas numéricas según el tipo activo
   const numerico = procesarFilasExcel([['n','p','pos','w'],['N',70,'1,3',250],['M',70,3,250]]);
-  assert(numerico.remeros[0].posiciones.join() === 'e1,e3' && numerico.remeros[1].posiciones.join() === 'e3', 'posiciones numéricas de bancadas individuales');
+  assert(numerico.formatoAnterior === true, 'una cabecera sin columnas por tipo es el formato anterior');
+  assert(numerico.remeros[0].posiciones.batel.join() === 'e1,e3' && numerico.remeros[1].posiciones.batel.join() === 'e3', 'posiciones numéricas de bancadas individuales');
+  assert(numerico.remeros[0].posiciones.trainera.length === 0 && numerico.remeros[0].posiciones.trainerilla.length === 0, 'formato anterior: las bancadas numéricas solo van al tipo activo');
+  state.config.tipoBarco = tipoAntesImport;
   const ok = procesarFilasExcel([['n','p','pos','w'],['A',80,'1B,2E',300],['B',70,'T','']]);
   assert(ok.remeros.length === 2 && ok.errores.length === 0, 'import válido falló');
   const vacio = procesarFilasExcel([['n','p','pos','w'],['E',80,'',300]]);
-  assert(vacio.remeros.length === 1 && vacio.remeros[0].posiciones.length === 0 && vacio.errores.length === 0, 'posiciones vacías deben importarse sin restricción');
+  assert(vacio.remeros.length === 1 && ORDEN_TIPOS.every(k => vacio.remeros[0].posiciones[k].length === 0) && vacio.errores.length === 0, 'posiciones vacías deben importarse sin restricción');
   const mal = procesarFilasExcel([['n','p','pos','w'],['C',80,'ZZ',300],['',70,'T',''],['D',0,'1B','']]);
   assert(mal.remeros.length === 0 && mal.errores.length === 3, 'import inválido debe dar 3 errores');
 
@@ -155,12 +159,16 @@ const test = `
   ORDEN_TIPOS.forEach(k => { const b = rb.barcos.find(x => x.tipo === k); assert(b && b.eslora === TIPOS_BARCO[k].eslora && b.peso === TIPOS_BARCO[k].peso, 'plantilla de barcos: valores de ' + k); });
   descargarPlantillaExcel();
   const rc = procesarFilasExcel(leer('plantilla_alineacion_remo.xlsx'));
-  assert(rc.remeros.length === 4 && rc.errores.length === 0, 'la plantilla de tripulación debe reimportarse limpia: ' + rc.errores.join('|'));
+  assert(rc.remeros.length === 5 && rc.errores.length === 0 && rc.formatoAnterior === false, 'la plantilla de tripulación debe reimportarse limpia: ' + rc.errores.join('|'));
+  const rcPor = n => rc.remeros.find(r => r.nombre === n).posiciones;
+  assert(rcPor('Jon Aramburu').trainera.join() === 'b3_est,b4_est,b5_est' && rcPor('Jon Aramburu').batel.length === 0, 'plantilla: las posiciones de trainera no pasan a batel');
+  assert(rcPor('Eneko Bilbao').batel.join() === 'e4' && rcPor('Eneko Bilbao').trainera.length === 0, 'plantilla: una restricción solo de batel');
+  assert(ORDEN_TIPOS.every(k => rcPor('Iñaki Sagastume')[k].join() === 'patron'), 'plantilla: el patrón lo es en los tres tipos');
 
   // ---------- alineación reimportable: exportar -> abrir debe devolver exactamente lo mismo ----------
   assert(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(fechaArchivo()), 'fechaArchivo debe ser AAAA-MM-DD');
   const rtNumericos = ev => Object.keys(ev).filter(k => typeof ev[k] === 'number' || ev[k] === null).reduce((o, k) => { o[k] = ev[k]; return o; }, {});
-  const rtPorPuesto = asig => Object.keys(asig).sort().map(sid => { const p = buscarPersona(asig[sid]); return sid + '=' + p.nombre + '|' + p.peso + '|' + p.potencia + '|' + p.posiciones.join('+') + '|' + p.disponible; });
+  const rtPorPuesto = asig => Object.keys(asig).sort().map(sid => { const p = buscarPersona(asig[sid]); return sid + '=' + p.nombre + '|' + p.peso + '|' + p.potencia + '|' + ORDEN_TIPOS.map(t => p.posiciones[t].join('+')).join('/') + '|' + p.disponible; });
   const rtAjustes = () => JSON.stringify(Object.keys(AJUSTES_TEXTO).concat(AJUSTES_NUM.map(a => a[0])).map(k => [k, state.config[k]]));
   const rtEditar = (wb, fn) => { const aoa = XLSX.utils.sheet_to_json(wb.Sheets[HOJA_DATOS], {header:1, defval:''}); fn(aoa); wb.Sheets[HOJA_DATOS] = XLSX.utils.aoa_to_sheet(aoa); return wb; };
   const rtLibro = nombre => XLSX.readFile(nombre);
@@ -170,7 +178,7 @@ const test = `
     state.config.prioridad = 'wkg'; state.config.wBanda = 1.7; state.config.categoria = 'senior_f'; state.config.bandaInicio = 'estribor';
     state.config.proelBanda = 'estribor'; state.config.xTrimObjetivo = 0.47; state.config.pesoMedioObjetivo = 79; state.config.calado = 0.21;
     reconstruirSlots(); cargarEjemplo(false);
-    state.remeros[3].disponible = false; state.remeros[4].posiciones = ['b2_bab', 'b2_est', 'e1', 'e2'].filter(id => SLOTS.some(sl => sl.id === id));
+    state.remeros[3].disponible = false; state.remeros[4].posiciones = {trainera: ['b2_bab', 'b2_est'], trainerilla: ['e1', 'e5'], batel: ['e2']}; // restricciones distintas en cada tipo: todas deben viajar en el archivo
     const asig = optimizarTop3()[0].asignacion, ev1 = rtNumericos(evaluar(asig, calcularPotenciaRef()));
     const antes = rtPorPuesto(asig).join(';'), ajustes1 = rtAjustes(), nRem = state.remeros.length;
     exportarTripulacionExcel(asig, 'rt_' + k + '.xlsx');
@@ -219,7 +227,8 @@ const test = `
   rtFalla('valor de ajuste inválido', rtEditar(rtCopia(), a => { a.find(f => f[1] === 'prioridad')[2] = 'inventada'; }), 'prioridad');
   rtFalla('dimensión negativa', rtEditar(rtCopia(), a => { a.find(f => f[1] === 'eslora')[2] = -3; }), 'eslora');
   rtFalla('peso no numérico', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[3] = 'mucho'; }), 'peso no válido');
-  rtFalla('posiciones desconocidas', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[5] = '9Z'; }), 'posiciones no reconocidas');
+  rtFalla('posiciones desconocidas', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[5] = '9Z'; }), 'posiciones no válidas para trainera');
+  rtFalla('código de otro tipo de barco', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'REMERO')[7] = '5'; }), 'posiciones no válidas para batel');
   rtFalla('puesto inexistente', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'PUESTO')[1] = 'e5'; }), 'no existe');
   rtFalla('remero inexistente en un puesto', rtEditar(rtCopia(), a => { a.find(f => f[0] === 'PUESTO')[2] = 999; }), 'no existe');
   rtFalla('mismo remero en dos puestos', rtEditar(rtCopia(), a => { const p = a.filter(f => f[0] === 'PUESTO'); p[1][2] = p[0][2]; }), 'dos puestos');
@@ -229,12 +238,79 @@ const test = `
   console.log('OK: archivos no válidos rechazados con mensaje claro y sin tocar el estado');
   state.barcos = rtBarcosPrevios; Object.assign(state.config, rtConfigPrevia); reconstruirSlots(); state.asignacionManual = {}; state.resultadosAuto = [];
 
+  // ---------- posiciones por tipo de barco: cada tipo tiene las suyas ----------
+  { const tipoPrev = state.config.tipoBarco;
+    const usar = k => { state.config.tipoBarco = k; reconstruirSlots(); };
+    // migración del formato antiguo (lista plana)
+    const m1 = migrarPosicionesLegacy(['patron', 'b3_est', 'proel'], 'trainera');
+    assert(m1.trainera.join() === 'patron,b3_est,proel' && m1.trainerilla.join() === 'patron' && m1.batel.join() === 'patron', 'migración: el patrón vale en los tres tipos y proel/bancadas con banda solo en trainera');
+    const m2 = migrarPosicionesLegacy(['e2', 'e5'], 'batel');
+    assert(m2.batel.join() === 'e2' && m2.trainerilla.join() === 'e5' && m2.trainera.length === 0, 'migración: una bancada que no existe en el batel activo va a trainerilla, no se pierde ni se copia');
+    const m3 = migrarPosicionesLegacy(['e1', 'e5'], 'trainera');
+    assert(m3.trainerilla.join() === 'e1,e5' && m3.batel.length === 0, 'migración: con trainera activa las bancadas individuales van a trainerilla');
+    assert(ORDEN_TIPOS.every(k => migrarPosicionesLegacy(['zz', 3, null], 'batel')[k].length === 0 && migrarPosicionesLegacy(undefined, 'batel')[k].length === 0), 'migración: basura y vacío no crean restricciones');
+    // datos corruptos o antiguos se normalizan al leerlos
+    const viejo = {posiciones: ['b2_bab', 'e1']};
+    usar('trainera');
+    assert(esCompatible(viejo, 'b2_bab') && !esCompatible(viejo, 'b1_bab'), 'una lista antigua se lee como restricción de trainera');
+    assert(!Array.isArray(viejo.posiciones) && viejo.posiciones.trainerilla.join() === 'e1', 'la lista antigua queda migrada al leerla');
+    const roto = {posiciones: {trainera: ['e1', 'b1_bab', 'b1_bab'], batel: 'x'}};
+    normalizarPosiciones(roto);
+    assert(roto.posiciones.trainera.join() === 'b1_bab' && roto.posiciones.batel.length === 0 && roto.posiciones.trainerilla.length === 0, 'normalizar descarta ids que no existen en el tipo, duplicados y listas no válidas');
+    // independencia: editar un tipo no toca los demás
+    const r = {id: 'z', nombre: 'Z', peso: 80, disponible: true, posiciones: posTrainera(['b3_est'])};
+    assert(esCompatible(r, 'b3_est') && !esCompatible(r, 'b1_bab') && contarCompatibles(r) === 1, 'restringido en trainera: un solo puesto');
+    usar('batel');
+    assert(contarCompatibles(r) === SLOTS_REMERO.length, 'sin restricción en batel: puede ir en cualquier bancada aunque en trainera esté restringido');
+    ponerPos(r, ['e4']);
+    assert(contarCompatibles(r) === 1 && esCompatible(r, 'e4') && !esCompatible(r, 'e1'), 'restringido en batel a la bancada 4');
+    assert(r.posiciones.trainera.join() === 'b3_est' && r.posiciones.trainerilla.length === 0, 'editar el batel no toca trainera ni trainerilla');
+    usar('trainerilla');
+    assert(contarCompatibles(r) === SLOTS_REMERO.length, 'trainerilla no hereda la restricción del batel');
+    // patrón por tipo
+    ponerPos(r, ['patron']);
+    assert(esCompatible(r, 'patron') && !puedeRemar(r), 'patrón puro en trainerilla');
+    usar('batel');
+    assert(!esCompatible(r, 'patron') && puedeRemar(r), 'el patrón de trainerilla no lo es en batel si no se marca');
+    // el optimizador respeta la lista del tipo activo
+    usar('batel'); state.config.prioridad = 'peso';
+    state.remeros = []; for(let i = 0; i < 6; i++) state.remeros.push({id: 'o' + i, nombre: 'O' + i, peso: 70 + 4 * i, potencia: 250, disponible: true, posiciones: posicionesVacias()});
+    state.remeros.push({id: 'pa', nombre: 'Pa', peso: 60, disponible: true, posiciones: posTodos(['patron'])});
+    state.remeros[5].posiciones.batel = ['e4']; state.remeros[5].posiciones.trainera = ['proel'];
+    state.asignacionManual = {}; state.resultadosAuto = [];
+    optimizarTop3().forEach(o => assert(o.asignacion.e4 === 'o5' || !Object.values(o.asignacion).includes('o5'), 'el optimizador de batel debe respetar la restricción de batel (y no la de trainera)'));
+    state.config.tipoBarco = tipoPrev; reconstruirSlots(); state.asignacionManual = {}; state.resultadosAuto = [];
+    // Excel de plantilla en el formato actual: columnas por tipo, localizadas por la cabecera
+    const cab = ['Nombre', 'Peso', 'Potencia (W)', 'Posiciones trainera', 'Posiciones trainerilla', 'Posiciones batel'];
+    const nuevoFmt = procesarFilasExcel([cab, ['A', 80, 300, '3E,4E', '1,2', '4'], ['B', 70, '', '', '', ''], ['C', 75, 250, 'T', 'T', 'T']]);
+    assert(nuevoFmt.formatoAnterior === false && nuevoFmt.errores.length === 0 && nuevoFmt.remeros.length === 3, 'formato por tipo: importación limpia ' + nuevoFmt.errores.join('|'));
+    const pa = nuevoFmt.remeros[0];
+    assert(pa.posiciones.trainera.join() === 'b3_est,b4_est' && pa.posiciones.trainerilla.join() === 'e1,e2' && pa.posiciones.batel.join() === 'e4' && pa.potencia === 300, 'formato por tipo: cada columna a su tipo');
+    assert(nuevoFmt.remeros[1].potencia === undefined && ORDEN_TIPOS.every(k => nuevoFmt.remeros[2].posiciones[k].join() === 'patron'), 'formato por tipo: potencia vacía y patrón en los tres');
+    const malPorTipo = procesarFilasExcel([cab, ['D', 80, '', '1', '', ''], ['E', 80, '', '', '5', ''], ['F', 80, '', '', '', '5'], ['G', 80, '', '', '', '1B']]);
+    assert(malPorTipo.remeros.length === 1 && malPorTipo.remeros[0].nombre === 'E' && malPorTipo.errores.length === 3, 'un código que no existe en ese tipo rechaza la fila: ' + malPorTipo.errores.join('|'));
+    assert(/trainera/.test(malPorTipo.errores[0]) && /batel/.test(malPorTipo.errores[1]) && /batel/.test(malPorTipo.errores[2]), 'el error nombra el tipo de barco');
+    const otroOrden = procesarFilasExcel([['n', 'p', 'Posiciones batel', 'Potencia (W)'], ['A', 80, '3', 280]]);
+    assert(otroOrden.remeros[0].posiciones.batel.join() === 'e3' && otroOrden.remeros[0].potencia === 280 && otroOrden.remeros[0].posiciones.trainera.length === 0, 'las columnas se localizan por la cabecera, no por su posición');
+    // alineación guardada en formato 1 (una sola columna de posiciones): se sigue abriendo
+    const wb2 = XLSX.readFile('rt_trainera.xlsx');
+    const f1 = rtEditar(wb2, a => { a[0][1] = 1; a.filter(f => f[0] === 'REMERO').forEach(f => { const disp = f[8]; f[6] = disp; f[7] = ''; f[8] = ''; }); });
+    const r1 = leerAlineacionGuardada(f1);
+    assert(!r1.error, 'el formato 1 debe seguir abriéndose: ' + r1.error);
+    assert(r1.avisos.some(x => /formato anterior/i.test(x)), 'abrir un formato 1 avisa del reparto de posiciones');
+    const jon = r1.datos.remeros.find(x => x.nombre === 'Jon Aramburu'), nagore = r1.datos.remeros.find(x => x.nombre === 'Nagore Uranga');
+    assert(jon.posiciones.trainera.join() === 'b3_est,b4_est,b5_est' && jon.posiciones.batel.length === 0, 'formato 1: la lista se reparte con el tipo del propio archivo');
+    assert(ORDEN_TIPOS.every(k => nagore.posiciones[k].join() === 'patron'), 'formato 1: el patrón vale en los tres tipos');
+    assert(r1.datos.remeros.filter(x => x.disponible === false).length === 1, 'formato 1: la disponibilidad sigue en su columna');
+    console.log('OK: posiciones por tipo de barco (migración, independencia entre tipos, Excel por tipo, formato 1 de la alineación)');
+    state.config.tipoBarco = tipoPrev; reconstruirSlots(); }
+
   // ---------- confirmación antes de sustituir o borrar la plantilla (solo si ya hay remeros) ----------
   { const rtRem = state.remeros; let preguntas = 0, respuesta = true;
     window.confirm = () => { preguntas++; return respuesta; };
     state.remeros = [];
     assert(confirmarSiHayRemeros('x') === true && preguntas === 0, 'con la plantilla vacía no debe preguntar');
-    state.remeros = [{id: 'a', nombre: 'A', peso: 80, posiciones: [], disponible: true}];
+    state.remeros = [{id: 'a', nombre: 'A', peso: 80, posiciones: posicionesVacias(), disponible: true}];
     respuesta = false; assert(confirmarSiHayRemeros('x') === false && preguntas === 1, 'con remeros debe preguntar y respetar «Cancelar»');
     respuesta = true; assert(confirmarSiHayRemeros('x') === true && preguntas === 2, 'con remeros debe preguntar y respetar «Aceptar»');
     delete window.confirm; state.remeros = rtRem; }
