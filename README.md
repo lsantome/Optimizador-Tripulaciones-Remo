@@ -17,6 +17,7 @@ Herramienta web (HTML sin servidor; también **PWA instalable y con modo offline
 - **Trimado** (momento respecto al centro) y **asiento longitudinal estimado** a partir de eslora, manga y calado.
 - **Mapa de calor** opcional (peso o potencia) sobre el esquema del barco.
 - **Importar/exportar Excel**; modo claro/oscuro.
+- **Guardar y reabrir una alineación:** el Excel exportado lleva una hoja de datos y se puede volver a abrir (*Abrir alineación guardada*) para seguir editando una alineación ya probada.
 
 Reglas de dominio: el **patrón nunca aporta potencia** y su peso no cuenta en el desequilibrio de bandas; el **proel** va sobre el eje, su peso no cuenta en bandas, pero su potencia se suma a babor (o estribor, configurable).
 
@@ -103,7 +104,7 @@ El repositorio incluye un proyecto [Capacitor](https://capacitorjs.com) (`androi
 ## Datos y privacidad
 
 - **Todo es local.** La app no envía datos a ningún servidor ni hace peticiones externas (SheetJS y las fuentes van incluidos). Plantilla, ajustes y tripulación manual se guardan en el `localStorage` del dispositivo (o en `window.storage` si se abre dentro de Claude.ai), con claves de prefijo `optimizador:`; se perderían al borrar los datos del sitio o usar una ventana privada.
-- **La PWA y el APK no comparten datos**, ni entre sí ni con el navegador, ni entre dispositivos: cada uno tiene su propio almacenamiento. **El Excel es la copia de seguridad y el medio para pasar los datos** de uno a otro (en el APK, *Exportar* abre el selector de compartir del móvil).
+- **La PWA y el APK no comparten datos**, ni entre sí ni con el navegador, ni entre dispositivos: cada uno tiene su propio almacenamiento. **El Excel es el medio para pasar los datos** de uno a otro: la alineación exportada se reabre con *Abrir alineación guardada* (trae toda la plantilla, el barco y los ajustes); para tu plantilla de remeros, mantén tu propio Excel con el formato de importación. En el APK, *Exportar* abre el selector de compartir del móvil.
 - En Pages, `https://lsantome.github.io` lo comparten todas tus apps: por eso las claves llevan prefijo propio. Hasta la 1.3.x el prefijo era `trainera:`; al abrir la 1.4 los datos se copian solos al prefijo nuevo (los antiguos no se borran).
 - Algunos navegadores restringen `localStorage` con `file://`; en ese caso la app funciona sin guardar (úsala desde Pages).
 

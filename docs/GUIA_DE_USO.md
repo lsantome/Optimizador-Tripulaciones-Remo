@@ -90,7 +90,7 @@ El interruptor **Básico / Avanzado** de la barra superior solo cambia lo que se
 8. **Optimizar alineación** → hasta 3 propuestas (Alineación A/B/C), cada una con su esquema y métricas.
 
 ### Modo Manual
-Arrastra una ficha del **Banco** a un puesto (o pulsa ficha y luego puesto). *Vaciar tripulación* y *Exportar a Excel* están en el banco. Las métricas se actualizan al instante.
+Arrastra una ficha del **Banco** a un puesto (o pulsa ficha y luego puesto). *Vaciar tripulación*, *Exportar a Excel* y *Abrir alineación guardada* están en el banco. Las métricas se actualizan al instante.
 
 ## 4. Cómo leer las métricas
 
@@ -103,11 +103,22 @@ Arrastra una ficha del **Banco** a un puesto (o pulsa ficha y luego puesto). *Va
 - **Dispersión de masas (cabeceo)** (vista avanzada): índice relativo de cuánto peso hay lejos del CG. No es un ángulo de cabeceo ni está validado.
 - **Aviso de dimensiones:** si con la tripulación nominal (remeros de 80 kg, patrón de 60 kg) el coeficiente de bloque sale fuera de 0,20–0,60, el panel **Barco** muestra un ⚠ para que revises eslora, manga, calado y peso (por ejemplo, una eslora tecleada en cm).
 
-## 5. Exportar a Excel
-Genera tres hojas: **Tripulación** (puesto, rol, banda, nombre, peso, potencia, potencia efectiva, W/kg), **Desglose** (tabla de cuadrantes con totales; proel y patrón aparte) y **Resumen** (los tres desequilibrios).
+## 5. Exportar a Excel y volver a abrir una alineación
+**Exportar a Excel** (en el banco del modo manual y en cada propuesta del modo automático) genera un archivo con el nombre `tripulacion_manual_AAAA-MM-DD.xlsx` (o `tripulacion_alineacion_A_…`) y cuatro hojas:
+- **Tripulación**: puesto, rol, banda, nombre, peso, potencia, potencia efectiva y W/kg.
+- **Desglose**: tabla de cuadrantes con totales; proel y patrón aparte.
+- **Resumen**: desequilibrios, centro de gravedad, ajustes y dimensiones del barco.
+- **Datos (no editar)**: todo lo necesario para reabrirlo (barco, ajustes, **toda la plantilla** con posiciones y disponibilidad, y la asignación).
+
+**Abrir alineación guardada** (botón junto a *Exportar a Excel*, en el modo manual) lee esa hoja de datos y te deja en el modo manual con la plantilla, el barco, los ajustes y la tripulación tal como estaban, para cambiar lo que quieras. Ten en cuenta:
+- **Reemplaza** la plantilla, el barco y los ajustes actuales (te pide confirmación antes). Si quieres conservar lo actual, expórtalo antes.
+- Solo se lee la hoja «Datos (no editar)». Lo que cambies a mano en las otras hojas **no** se lee al reabrir.
+- Solo se pueden abrir archivos exportados con la versión 1.5.0 o posterior.
+- Si el barco venía del maestro de barcos y no está en el tuyo, se añade; si ya existe con otras dimensiones, manda el archivo.
+- El archivo contiene nombre, peso y potencia de **toda** la plantilla (no solo de quienes van en el barco): trátalo como dato personal al compartirlo.
 
 ## 6. Persistencia y datos
-La app guarda plantilla, ajustes (incluido el tema) y tripulación manual en el `localStorage` de tu navegador, así que al recargar recuperas el estado. Es local a ese navegador y equipo: no se comparte con otras personas ni dispositivos, y se pierde al borrar los datos del sitio o en ventana privada. Algunos navegadores bloquean `localStorage` con archivos abiertos desde disco (`file://`); entonces no se guarda nada. **Exporta a Excel para compartir y como copia de seguridad.** Las alineaciones del modo Automático no se guardan: se recalculan. Los datos no salen de tu navegador: no hay servidor y las librerías van incluidas (en `vendor/` o, en la versión autónoma, dentro del propio HTML), por lo que no hay peticiones externas.
+La app guarda plantilla, ajustes (incluido el tema) y tripulación manual en el `localStorage` de tu navegador, así que al recargar recuperas el estado. Es local a ese navegador y equipo: no se comparte con otras personas ni dispositivos, y se pierde al borrar los datos del sitio o en ventana privada. Algunos navegadores bloquean `localStorage` con archivos abiertos desde disco (`file://`); entonces no se guarda nada. **Exporta a Excel para compartir o guardar una alineación** (se puede volver a abrir, ver sección 5); para guardar tu plantilla de remeros, mantén tu propio Excel con el formato de importación. Las alineaciones del modo Automático no se guardan: se recalculan. Los datos no salen de tu navegador: no hay servidor y las librerías van incluidas (en `vendor/` o, en la versión autónoma, dentro del propio HTML), por lo que no hay peticiones externas.
 
 ### Instalar como aplicación (PWA)
 Si abres la herramienta desde GitHub Pages, puedes instalarla: Chrome/Edge muestran un icono de instalar en la barra de direcciones; en Android, menú → *Instalar aplicación*; en iPhone/iPad (Safari), Compartir → *Añadir a pantalla de inicio*. Tras la primera visita funciona **sin conexión**. Cuando haya una versión nueva aparecerá el aviso «Hay una versión nueva de la herramienta» con el botón *Actualizar* (tus datos guardados se conservan). Los datos de la app instalada y los de la pestaña del navegador comparten almacenamiento en el mismo navegador, pero no entre dispositivos.

@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); las versiones siguen [SemVer](https://semver.org/lang/es/).
 La versión de `package.json` es la fuente de verdad: la etiqueta de Git `vX.Y.Z` debe coincidir con ella (el workflow de Android lo comprueba).
 
+## [1.5.0] - 2026-11-09
+
+### Added
+- **Abrir alineación guardada** (botón junto a *Exportar a Excel* en el modo manual): vuelve a cargar un Excel exportado por la app —plantilla completa con posiciones y disponibilidad, barco, ajustes que afectan al cálculo y asignación— y deja la tripulación en modo manual para seguir editando. Reemplaza lo actual tras pedir confirmación; valida el archivo y, si no es válido, explica por qué sin tocar nada.
+- La exportación incluye una hoja **«Datos (no editar)»** en formato por filas (marca, versión del formato, ajustes, remeros y puestos). Las hojas Tripulación, Desglose y Resumen no cambian. Solo se pueden reabrir los archivos exportados desde esta versión.
+- Pruebas de ida y vuelta (asignación y métricas idénticas en trainera, trainerilla y batel; barco del maestro) y de rechazo de archivos manipulados, de formato futuro o sin la hoja de datos.
+
+### Changed
+- Los archivos exportados llevan la fecha en el nombre (`tripulacion_manual_AAAA-MM-DD.xlsx`) para no pisar versiones anteriores.
+- En la app nativa, el estado de la exportación desde el modo manual se muestra junto al botón.
+- README y guías: el Excel exportado ya no se presenta como copia de seguridad de la plantilla (no la incluye en el formato de importación).
+
 ## [1.4.1] - 2026-11-01
 
 ### Changed
