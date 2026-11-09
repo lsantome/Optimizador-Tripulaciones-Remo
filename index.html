@@ -406,7 +406,7 @@
     </div>
     <div class="pool-actions">
       <button class="btn btn-sm" id="btnAddRemero">+ Remero</button>
-      <button class="btn btn-sm btn-ghost" id="btnExample">Cargar ejemplo</button>
+      <button class="btn btn-sm btn-ghost" id="btnExample" title="Sustituye la plantilla actual por personas ficticias de ejemplo (remeros y patrones)">Cargar tripulación de ejemplo</button>
       <button class="btn btn-sm btn-ghost" id="btnClearRemeros">Vaciar</button>
     </div>
     <div style="overflow-x:auto;">
@@ -422,6 +422,11 @@
 
 <!-- ==================== TAB: TRIPULACION / CONFIGURACION ==================== -->
 <div class="tab-content" id="panelTripulacion">
+
+  <div class="note-box" id="avisoSinRemeros" role="status" style="display:none; margin-bottom:16px;">
+    <b>Todavía no hay remeros.</b> Carga la tripulación de ejemplo o importa tu Excel de tripulación desde Configuración.
+    <button type="button" class="btn btn-sm" id="btnIrConfiguracion" style="margin-left:8px;">Ir a Configuración</button>
+  </div>
 
   <section class="panel" id="panelBarco" style="margin-bottom:16px;">
     <div class="panel-head"><div class="panel-title">Barco</div></div>
@@ -1457,8 +1462,7 @@ async function storageSet(clave, valor){
 }
 
 async function cargarDatos(){
-  let cargoRemeros = false;
-  try{ const r = await storageGet('plantilla-remeros'); if(r){ const arr = JSON.parse(r); if(Array.isArray(arr)){ state.remeros = arr; cargoRemeros = true; } } }catch(e){}
+  try{ const r = await storageGet('plantilla-remeros'); if(r){ const arr = JSON.parse(r); if(Array.isArray(arr)){ state.remeros = arr; } } }catch(e){}
   try{ const c = await storageGet('config-optimizador'); if(c){ Object.assign(state.config, JSON.parse(c)); } }catch(e){}
   try{ const m = await storageGet('tripulacion-manual'); if(m){ state.asignacionManual = JSON.parse(m); } }catch(e){}
   try{
@@ -1472,7 +1476,7 @@ async function cargarDatos(){
   if(state.config.bandaInicio !== 'estribor') state.config.bandaInicio = 'babor';
   if(state.config.barcoId && !barcoMaestroActivo()) state.config.barcoId = '';
   reconstruirSlots();
-  if(!cargoRemeros){ cargarEjemplo(false); }
+  // sin datos guardados la app arranca vacía: la plantilla de ejemplo se carga a petición (botón «Cargar tripulación de ejemplo»)
   sincronizarControles();
   renderTodo();
 }
@@ -1509,6 +1513,11 @@ function cargarEjemplo(persistir){
   state.resultadosAuto = [];
   state.asignacionManual = {};
   if(persistir){ guardarRemeros(); guardarManual(); renderTodo(); }
+}
+
+/* Acciones que sustituyen o borran la plantilla: si ya hay remeros, piden confirmación (evita perder datos reales por un clic). */
+function confirmarSiHayRemeros(mensaje){
+  return state.remeros.length === 0 || window.confirm(mensaje);
 }
 
 /* ============================ IMPORTAR / DESCARGAR EXCEL ============================ */
@@ -1934,6 +1943,8 @@ function resumenPosiciones(remero){
 /* ============================ RENDER: PLANTILLA (EQUIPO) ============================ */
 
 function renderTablaRemeros(){
+  const aviso = document.getElementById('avisoSinRemeros');
+  if(aviso) aviso.style.display = state.remeros.length === 0 ? '' : 'none';
   const tbody = document.getElementById('poolTbodyRemeros');
   tbody.innerHTML = '';
   state.remeros.forEach(function(r){
@@ -2630,7 +2641,11 @@ function bind(){
     state.remeros.push({id:nuevoId(), nombre:'Nuevo remero', peso:80, potencia:undefined, disponible:true, posiciones:[]});
     guardarRemeros(); renderTablaRemeros();
   });
-  document.getElementById('btnExample').addEventListener('click', function(){ cargarEjemplo(true); });
+  document.getElementById('btnExample').addEventListener('click', function(){
+    if(!confirmarSiHayRemeros('La plantilla actual (' + state.remeros.length + ' remeros) se sustituirá por la de ejemplo y se vaciará la tripulación manual. ¿Continuar?')) return;
+    cargarEjemplo(true);
+  });
+  document.getElementById('btnIrConfiguracion').addEventListener('click', function(){ cambiarTabPrincipal('plantilla'); });
   document.getElementById('btnImportExcel').addEventListener('click', function(){
     document.getElementById('inputExcelFile').click();
   });
@@ -2641,6 +2656,7 @@ function bind(){
   });
   document.getElementById('btnDescargarPlantillaExcel').addEventListener('click', descargarPlantillaExcel);
   document.getElementById('btnClearRemeros').addEventListener('click', function(){
+    if(!confirmarSiHayRemeros('Se van a borrar los ' + state.remeros.length + ' remeros de la plantilla. ¿Continuar?')) return;
     state.remeros = []; guardarRemeros(); renderTablaRemeros();
   });
 

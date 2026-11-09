@@ -7,6 +7,12 @@ const cut = src.indexOf('function renderBanco()');
 assert(cut > 0, 'No se encontró renderBanco(): ajusta el punto de corte en tests/harness.js');
 src = src.slice(0, cut);
 
+// Arranque sin datos: cargarDatos no debe precargar la plantilla de ejemplo (solo el botón «Cargar tripulación de ejemplo»)
+const cuerpoCargarDatos = /async function cargarDatos\(\)\{[\s\S]*?\n\}\n/.exec(src);
+assert(cuerpoCargarDatos, 'No se encontró cargarDatos() en index.html');
+assert(!/cargarEjemplo\(/.test(cuerpoCargarDatos[0]), 'cargarDatos() no debe precargar la plantilla de ejemplo');
+assert(/id="btnExample"[^>]*>Cargar tripulación de ejemplo</.test(html), 'el botón de ejemplo debe llamarse «Cargar tripulación de ejemplo»');
+
 const test = `
   const near = (a, b, tol, msg) => assert(Math.abs(a - b) <= tol, msg + ' (' + a + ' vs ' + b + ')');
 
@@ -222,6 +228,17 @@ const test = `
   assert(JSON.stringify([state.remeros.length, state.config, Object.keys(state.asignacionManual)]) === rtEstado, 'leer un archivo no válido no debe modificar el estado');
   console.log('OK: archivos no válidos rechazados con mensaje claro y sin tocar el estado');
   state.barcos = rtBarcosPrevios; Object.assign(state.config, rtConfigPrevia); reconstruirSlots(); state.asignacionManual = {}; state.resultadosAuto = [];
+
+  // ---------- confirmación antes de sustituir o borrar la plantilla (solo si ya hay remeros) ----------
+  { const rtRem = state.remeros; let preguntas = 0, respuesta = true;
+    window.confirm = () => { preguntas++; return respuesta; };
+    state.remeros = [];
+    assert(confirmarSiHayRemeros('x') === true && preguntas === 0, 'con la plantilla vacía no debe preguntar');
+    state.remeros = [{id: 'a', nombre: 'A', peso: 80, posiciones: [], disponible: true}];
+    respuesta = false; assert(confirmarSiHayRemeros('x') === false && preguntas === 1, 'con remeros debe preguntar y respetar «Cancelar»');
+    respuesta = true; assert(confirmarSiHayRemeros('x') === true && preguntas === 2, 'con remeros debe preguntar y respetar «Aceptar»');
+    delete window.confirm; state.remeros = rtRem; }
+  console.log('OK: confirmación antes de sustituir o borrar la plantilla');
 
   // ---------- vista básica / avanzada: solo cambia lo mostrado, nunca el cálculo ----------
   const usarTipo = k => { state.config.tipoBarco = k; state.config.barcoId = ''; cargarValoresBarco(TIPOS_BARCO[k]); reconstruirSlots(); }; // sin DOM, como seleccionarBarcoPredefinido
